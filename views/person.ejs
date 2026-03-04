@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title><%= person.praenomen %><%= nomen ? ' ' + nomen : '' %></title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <h1>
+    <%= person.praenomen %><%= nomen ? ' ' + nomen : '' %>
+    <% if (person.cognomen) { %> <%= person.cognomen %> <% } %>
+    <%= formatRomanDate(person.birth_year, person.death_year) %>
+  </h1>
+
+  <p><strong>House (Gens):</strong> <%= house.gens_name %></p>
+  <p><strong>Sex:</strong> <%= person.sex === 1 ? 'Male' : 'Female' %></p>
+
+  <hr>
+
+  <h2>Parents</h2>
+  <% if (parents.length === 0) { %>
+    <p>No parents recorded.</p>
+  <% } else { %>
+    <ul>
+      <% parents.forEach(p => { %>
+        <li>
+          <% const parentNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
+          <a href="/people/<%= p.id %>">
+            <%= `${p.praenomen}${parentNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+          </a>
+          <%= formatRomanDate(p.birth_year, p.death_year) %>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+
+  <h2>Children</h2>
+  <% if (children.length === 0) { %>
+    <p>No children recorded.</p>
+  <% } else { %>
+    <ul>
+      <% children.forEach(c => { %>
+        <li>
+          <% const childNomen = c.is_bastard ? '' : ` ${genderifyNomen(c.nomen, c.sex)}`; %>
+          <a href="/people/<%= c.id %>">
+            <%= `${c.praenomen}${childNomen}${c.cognomen ? ' ' + c.cognomen : ''}` %>
+          </a>
+          <%= formatRomanDate(c.birth_year, c.death_year) %>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+
+  <h2>Siblings</h2>
+  <% if (siblings.length === 0) { %>
+    <p>No siblings recorded.</p>
+  <% } else { %>
+    <ul>
+      <% siblings.forEach(s => { %>
+        <li>
+          <% const siblingNomen = s.is_bastard ? '' : ` ${genderifyNomen(s.nomen, s.sex)}`; %>
+          <a href="/people/<%= s.id %>">
+            <%= `${s.praenomen}${siblingNomen}${s.cognomen ? ' ' + s.cognomen : ''}` %>
+          </a>
+          <%= formatRomanDate(s.birth_year, s.death_year) %>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+
+  <hr>
+
+  <a href="/people/edit/<%= person.id %>">Edit Person</a> |
+  <a href="/people/<%= person.id %>/relationships">View All Relationships</a> |
+  <a href="/tree/<%= house.id %>">View Family Tree</a> |
+  <a href="/people">Back to People</a>
+
+</body>
+</html>

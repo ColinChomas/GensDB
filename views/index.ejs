@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Roman Family Tree</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Roman Family Tree System</h1>
+
+  <h2>Navigation</h2>
+  <ul>
+    <li><a href="/houses">View Houses (Gentes)</a></li>
+    <li><a href="/houses/add">Add a House</a></li>
+    <li><a href="/people">View People</a></li>
+    <li><a href="/people/add">Add a Person</a></li>
+    <li><a href="/relationships/check">Check Relationship Between People</a></li>
+    <li><a href="/relationships/stats">Relationship Statistics</a></li>
+  </ul>
+
+  <h2>Existing Houses</h2>
+  <ul>
+    <% houses.forEach(h => { %>
+      <li>
+        <strong><%= h.gens_name %></strong>
+        — <a href="/tree/<%= h.id %>">View Tree</a>
+      </li>
+    <% }) %>
+  </ul>
+</body>
+</html>

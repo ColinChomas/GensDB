@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Edit House</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Edit Gens <%= house.gens_name %></h1>
+
+  <a href="/houses">← Back</a>
+
+  <h2>Set Founder</h2>
+
+  <form method="POST" action="/houses/edit/<%= house.id %>">
+    <label>Select Founder:</label><br>
+    <select name="founder_id">
+      <option value="">None</option>
+
+      <% people.forEach(p => { %>
+        <% 
+          const nomen = p.is_bastard ? '' : genderifyNomen(
+            people.find(x => x.id === p.id).nomen || house.gens_name,
+            p.sex
+          );
+        %>
+        <option value="<%= p.id %>" <%= p.id === house.founder_id ? 'selected' : '' %>>
+          <%= `${p.praenomen}${nomen ? ' ' + nomen : ''}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+          <% if (p.birth_year) { %> (<%= p.birth_year %>) <% } %>
+        </option>
+      <% }) %>
+    </select><br><br>
+
+    <button type="submit">Save Founder</button>
+  </form>
+
+  <hr>
+
+  <h2>Create New Founder</h2>
+
+  <form method="POST" action="/houses/create-founder/<%= house.id %>">
+
+    <label>Praenomen:</label><br>
+    <input type="text" name="praenomen" required><br><br>
+
+    <label>Sex:</label><br>
+    <select name="sex">
+      <option value="1">Male</option>
+      <option value="0">Female</option>
+    </select><br><br>
+
+    <label>Cognomen (optional):</label><br>
+    <input type="text" name="cognomen"><br><br>
+
+    <label>Birth Year:</label><br>
+    <input type="number" name="birth_year"><br><br>
+
+    <label>Death Year:</label><br>
+    <input type="number" name="death_year"><br><br>
+
+    <button type="submit">Create Founder</button>
+  </form>
+
+</body>
+</html>

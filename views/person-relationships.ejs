@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Relationships - <%= person.praenomen %><%= nomen ? ' ' + nomen : '' %></title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .relation-item {
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #f9f9f9;
+      border-left: 3px solid #333;
+    }
+    .relation-type {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #ddd;
+      border-radius: 3px;
+      font-size: 0.85em;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>All Relationships for <%= person.praenomen %><%= nomen ? ' ' + nomen : '' %><% if (person.cognomen) { %> <%= ' ' + person.cognomen %><% } %></h1>
+
+  <p><strong>House:</strong> <%= house.gens_name %></p>
+
+  <a href="/people/<%= person.id %>">← Back to Person</a> | 
+  <a href="/relationships/stats">View Statistics</a>
+
+  <hr>
+
+  <% if (relations.length === 0) { %>
+    <p>No computed relationships found. <a href="/relationships/check">Compute relationships</a> or use the "Compute All Relationships" button.</p>
+  <% } else { %>
+    <h2><%= relations.length %> Relationship Path<%= relations.length !== 1 ? 's' : '' %> Found</h2>
+
+    <%
+      // Group by the other person
+      const grouped = new Map();
+      relations.forEach(rel => {
+        const otherId = rel.person1_id === person.id ? rel.person2_id : rel.person1_id;
+        if (!grouped.has(otherId)) {
+          grouped.set(otherId, []);
+        }
+        grouped.get(otherId).push(rel);
+      });
+    %>
+
+    <% Array.from(grouped.entries()).forEach(([otherId, rels]) => { %>
+      <%
+        const firstRel = rels[0];
+        const isOtherPerson1 = firstRel.person1_id !== person.id;
+        const otherPraenomen = isOtherPerson1 ? firstRel.p1_praenomen : firstRel.p2_praenomen;
+        const otherNomen = isOtherPerson1 ? firstRel.p1_nomen : firstRel.p2_nomen;
+        const otherCognomen = isOtherPerson1 ? firstRel.p1_cognomen : firstRel.p2_cognomen;
+        const otherSex = isOtherPerson1 ? firstRel.p1_sex : firstRel.p2_sex;
+        const otherIsBastard = isOtherPerson1 ? firstRel.p1_is_bastard : firstRel.p2_is_bastard;
+        const otherNomenGendered = otherIsBastard ? '' : genderifyNomen(otherNomen, otherSex);
+        const otherFullName = `${otherPraenomen}${otherNomenGendered ? ' ' + otherNomenGendered : ''}${otherCognomen ? ' ' + otherCognomen : ''}`;
+      %>
+
+      <div class="relation-item">
+        <h3>
+          <a href="/people/<%= otherId %>"><%= otherFullName %></a>
+          <span class="relation-type"><%= rels[0].relation_type %></span>
+        </h3>
+
+        <% if (rels.length === 1) { %>
+          <p><strong><%= rels[0].relation_string %></strong></p>
+          <p>
+            Distance: <%= rels[0].distance %> generation<%= rels[0].distance !== 1 ? 's' : '' %>
+            <% if (rels[0].common_ancestor_id) { %>
+              <br>
+              Common Ancestor: 
+              <%= rels[0].anc_praenomen %><%= rels[0].anc_is_bastard ? '' : ' ' + genderifyNomen(rels[0].anc_nomen, rels[0].anc_sex) %><%= rels[0].anc_cognomen ? ' ' + rels[0].anc_cognomen : '' %>
+            <% } %>
+          </p>
+        <% } else { %>
+          <p><strong>Primary:</strong> <%= rels[0].relation_string %></p>
+          <details>
+            <summary>View all <%= rels.length %> relationship paths</summary>
+            <ul>
+              <% rels.forEach(rel => { %>
+                <li>
+                  <%= rel.relation_string %>
+                  <br>
+                  <small>
+                    Distance: <%= rel.distance %> | 
+                    Type: <%= rel.relation_type %>
+                    <% if (rel.common_ancestor_id) { %>
+                      | via <%= rel.anc_praenomen %><%= rel.anc_is_bastard ? '' : ' ' + genderifyNomen(rel.anc_nomen, rel.anc_sex) %><%= rel.anc_cognomen ? ' ' + rel.anc_cognomen : '' %>
+                    <% } %>
+                  </small>
+                </li>
+              <% }) %>
+            </ul>
+          </details>
+        <% } %>
+      </div>
+    <% }) %>
+  <% } %>
+
+</body>
+</html>

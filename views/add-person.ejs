@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Add Person</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Add a Person</h1>
+
+  <form method="POST" action="/people/add">
+
+    <label>Praenomen:</label><br>
+    <input type="text" name="praenomen" required><br><br>
+
+    <label>House (Gens):</label><br>
+    <select name="house_id" required>
+      <% houses.forEach(h => { %>
+        <option value="<%= h.id %>"><%= h.gens_name %></option>
+      <% }) %>
+    </select><br><br>
+
+    <label>Sex:</label><br>
+    <select name="sex" required>
+      <option value="1">Male</option>
+      <option value="0">Female</option>
+    </select><br><br>
+
+    <label>Cognomen (optional):</label><br>
+    <input type="text" name="cognomen"><br><br>
+
+    <label>Birth Year (e.g., 100 for 100 BC):</label><br>
+    <input type="number" name="birth_year"><br><br>
+
+    <label>Death Year (optional):</label><br>
+    <input type="number" name="death_year"><br><br>
+
+    <label>
+      <input type="checkbox" name="is_bastard">
+      Bastard (hide last name in displays)
+    </label><br><br>
+
+    <h3>Parents</h3>
+
+    <label>Father:</label><br>
+    <select name="father_id">
+      <option value="">None</option>
+      <% people.filter(p => p.sex === 1).forEach(p => { %>
+        <% const fatherNomen = p.is_bastard ? '' : ` ${genderifyNomen(houses.find(h => h.id === p.house_id).gens_name, 1)}`; %>
+        <option value="<%= p.id %>">
+          <%= `${p.praenomen}${fatherNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+          <% if (p.birth_year) { %> (<%= p.birth_year %>) <% } %>
+        </option>
+      <% }) %>
+    </select><br><br>
+
+    <label>Mother:</label><br>
+    <select name="mother_id">
+      <option value="">None</option>
+      <% people.filter(p => p.sex === 0).forEach(p => { %>
+        <% const motherNomen = p.is_bastard ? '' : ` ${genderifyNomen(houses.find(h => h.id === p.house_id).gens_name, 0)}`; %>
+        <option value="<%= p.id %>">
+          <%= `${p.praenomen}${motherNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+          <% if (p.birth_year) { %> (<%= p.birth_year %>) <% } %>
+        </option>
+      <% }) %>
+    </select><br><br>
+
+    <button type="submit">Create Person</button>
+  </form>
+
+  <br>
+  <a href="/people">Back</a>
+</body>
+</html>

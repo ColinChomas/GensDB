@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Add Parent/Child Relationship</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Add Parent → Child Relationship</h1>
+
+  <form method="POST" action="/relationships/add">
+    <label>Parent:</label><br>
+    <select name="parent_id">
+      <% people.forEach(p => { %>
+        <option value="<%= p.id %>">
+          <%= p.praenomen %><%= p.is_bastard ? '' : ' ' + p.nomen %><%= p.cognomen ? ' ' + p.cognomen : '' %>
+        </option>
+      <% }) %>
+    </select><br><br>
+
+    <label>Child:</label><br>
+    <select name="child_id">
+      <% people.forEach(p => { %>
+        <option value="<%= p.id %>">
+          <%= p.praenomen %><%= p.is_bastard ? '' : ' ' + p.nomen %><%= p.cognomen ? ' ' + p.cognomen : '' %>
+        </option>
+      <% }) %>
+    </select><br><br>
+
+    <label>Relationship Type:</label><br>
+    <select name="relationship_type">
+      <option value="biological">Biological</option>
+      <option value="adoptive">Adoptive</option>
+      <option value="step">Step</option>
+    </select><br><br>
+
+    <button type="submit">Add Relationship</button>
+  </form>
+
+  <br>
+  <a href="/">Back</a>
+</body>
+</html>

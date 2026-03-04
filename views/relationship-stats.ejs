@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Relationship Statistics</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    table {
+      width: 100%;
+      max-width: 800px;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background-color: #333;
+      color: white;
+    }
+    tr:hover {
+      background-color: #f5f5f5;
+    }
+    .rank {
+      font-weight: bold;
+      color: #666;
+    }
+    .stat-box {
+      background: #f9f9f9;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+      max-width: 800px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Relationship Statistics</h1>
+
+  <a href="/">← Back Home</a> | 
+  <a href="/relationships/check">Check Relationships</a>
+
+  <div class="stat-box">
+    <h2>Summary</h2>
+    <p><strong>Total Relationship Paths:</strong> <%= totalRelations %></p>
+    <p><strong>Total People:</strong> <%= stats.length %></p>
+  </div>
+
+  <h2>People Ranked by Number of Relationships</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Name</th>
+        <th>Related To</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% stats.forEach((person, index) => { %>
+        <%
+          const nomen = person.is_bastard ? '' : genderifyNomen(person.nomen, person.sex);
+          const fullName = `${person.praenomen}${nomen ? ' ' + nomen : ''}${person.cognomen ? ' ' + person.cognomen : ''}`;
+        %>
+        <tr>
+          <td class="rank">#<%= index + 1 %></td>
+          <td>
+            <a href="/people/<%= person.id %>"><%= fullName %></a>
+          </td>
+          <td>
+            <strong><%= person.relation_count %></strong> 
+            <%= person.relation_count === 1 ? 'person' : 'people' %>
+          </td>
+          <td>
+            <% if (person.relation_count > 0) { %>
+              <a href="/people/<%= person.id %>/relationships">View All</a>
+            <% } else { %>
+              <em>No relationships</em>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <hr>
+  <h3>Update Relationships</h3>
+  <form method="POST" action="/relationships/compute-all" onsubmit="return confirm('This may take a while for large databases. Continue?');">
+    <button type="submit">Recompute All Relationships</button>
+    <br><small>This will recalculate and update all relationship paths in the database.</small>
+  </form>
+
+</body>
+</html>

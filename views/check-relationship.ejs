@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Check Relationship</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Check Relationship Between Two People</h1>
+
+  <a href="/">← Back</a>
+
+  <form method="POST" action="/relationships/check">
+    <label>First Person:</label><br>
+    <select name="person1_id" required>
+      <% people.forEach(p => { %>
+        <%
+          const house = houses.find(h => h.id === p.house_id);
+          const nomen = p.is_bastard ? '' : genderifyNomen(house.gens_name, p.sex);
+          const fullName = `${p.praenomen}${nomen ? ' ' + nomen : ''}${p.cognomen ? ' ' + p.cognomen : ''}`;
+        %>
+        <option value="<%= p.id %>" <%= result && result.person1_id == p.id ? 'selected' : '' %>>
+          <%= fullName %>
+          <% if (p.birth_year) { %> (<%= p.birth_year %>) <% } %>
+        </option>
+      <% }) %>
+    </select><br><br>
+
+    <label>Second Person:</label><br>
+    <select name="person2_id" required>
+      <% people.forEach(p => { %>
+        <%
+          const house = houses.find(h => h.id === p.house_id);
+          const nomen = p.is_bastard ? '' : genderifyNomen(house.gens_name, p.sex);
+          const fullName = `${p.praenomen}${nomen ? ' ' + nomen : ''}${p.cognomen ? ' ' + p.cognomen : ''}`;
+        %>
+        <option value="<%= p.id %>" <%= result && result.person2_id == p.id ? 'selected' : '' %>>
+          <%= fullName %>
+          <% if (p.birth_year) { %> (<%= p.birth_year %>) <% } %>
+        </option>
+      <% }) %>
+    </select><br><br>
+
+    <button type="submit">Check Relationship</button>
+  </form>
+
+  <% if (result) { %>
+    <hr>
+    <h2>Results</h2>
+
+    <% if (result.closest) { %>
+      <h3>Primary Relationship</h3>
+      <p><strong><%= result.closest.relationString %></strong></p>
+      <p>
+        Type: <%= result.closest.type %><br>
+        Distance: <%= result.closest.distance %> generation<%= result.closest.distance !== 1 ? 's' : '' %><br>
+        <% if (result.closest.commonAncestor) { %>
+          Common Ancestor: <%= result.closest.commonAncestor %>
+        <% } %>
+      </p>
+
+      <% if (result.allRelations.length > 1) { %>
+        <h3>All Relationship Paths (<%= result.allRelations.length %>)</h3>
+        <ul>
+          <% result.allRelations.forEach(rel => { %>
+            <li>
+              <strong><%= rel.relationString %></strong>
+              <br>
+              <small>
+                Type: <%= rel.type %> | 
+                Distance: <%= rel.distance %> | 
+                <% if (rel.commonAncestor) { %>
+                  Common Ancestor: <%= rel.commonAncestor %>
+                <% } %>
+              </small>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    <% } else { %>
+      <p><strong>No relationship found.</strong> These people are not related within the search depth.</p>
+    <% } %>
+  <% } %>
+
+  <hr>
+  <h3>Advanced</h3>
+  <form method="POST" action="/relationships/compute-all" onsubmit="return confirm('This may take a while for large databases. Continue?');">
+    <button type="submit">Compute All Relationships</button>
+    <br><small>This will calculate and store relationships for all person pairs in the database.</small>
+  </form>
+
+</body>
+</html>
