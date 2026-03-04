@@ -2,8 +2,8 @@ const mysql = require('mysql2/promise');
 
 const pool = mysql.createPool({
   host: 'localhost',
-  user: 'root',
-  password: 'W!lliam128',
+  user: process.env.SQLUSER,
+  password: process.env.SQLPASSWORD,
   database: 'gensDB',
 });
 
