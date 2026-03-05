@@ -3,6 +3,16 @@
 <head>
   <title>Add Person</title>
   <link rel="stylesheet" href="/style.css">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <style>
+    .select2-container--default .select2-selection--single {
+      border: 1px solid #ccc;
+      padding: 3px;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+      padding: 2px;
+    }
+  </style>
 </head>
 <body>
   <h1>Add a Person</h1>
@@ -13,7 +23,7 @@
     <input type="text" name="praenomen" required><br><br>
 
     <label>House (Gens):</label><br>
-    <select name="house_id" required>
+    <select name="house_id" class="searchable-select" required>
       <% houses.forEach(h => { %>
         <option value="<%= h.id %>"><%= h.gens_name %></option>
       <% }) %>
@@ -42,7 +52,7 @@
     <h3>Parents</h3>
 
     <label>Father:</label><br>
-    <select name="father_id">
+    <select name="father_id" class="searchable-select">
       <option value="">None</option>
       <% people.filter(p => p.sex === 1).forEach(p => { %>
         <% const fatherNomen = p.is_bastard ? '' : ` ${genderifyNomen(houses.find(h => h.id === p.house_id).gens_name, 1)}`; %>
@@ -54,7 +64,7 @@
     </select><br><br>
 
     <label>Mother:</label><br>
-    <select name="mother_id">
+    <select name="mother_id" class="searchable-select">
       <option value="">None</option>
       <% people.filter(p => p.sex === 0).forEach(p => { %>
         <% const motherNomen = p.is_bastard ? '' : ` ${genderifyNomen(houses.find(h => h.id === p.house_id).gens_name, 0)}`; %>
@@ -70,5 +80,16 @@
 
   <br>
   <a href="/people">Back</a>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <script>
+    $(document).ready(function() {
+      $('.searchable-select').select2({
+        allowClear: true,
+        placeholder: 'Search...'
+      });
+    });
+  </script>
 </body>
 </html>
