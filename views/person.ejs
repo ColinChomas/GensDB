@@ -12,26 +12,81 @@
     <%= formatRomanDate(person.birth_year, person.death_year) %>
   </h1>
 
-  <p><strong>House (Gens):</strong> <%= house.gens_name %></p>
+  <p><strong>Birth House (Gens):</strong> <%= house.gens_name %></p>
+  <% if (adoptiveHouse) { %>
+    <p><strong>Adoptive House (Gens):</strong> <%= adoptiveHouse.gens_name %></p>
+  <% } %>
   <p><strong>Sex:</strong> <%= person.sex === 1 ? 'Male' : 'Female' %></p>
 
   <hr>
 
   <h2>Parents</h2>
-  <% if (parents.length === 0) { %>
+  <% if (confirmedParents.length === 0 && rumoredParents.length === 0 && confirmedAdoptiveParents.length === 0 && rumoredAdoptiveParents.length === 0) { %>
     <p>No parents recorded.</p>
   <% } else { %>
-    <ul>
-      <% parents.forEach(p => { %>
-        <li>
-          <% const parentNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
-          <a href="/people/<%= p.id %>">
-            <%= `${p.praenomen}${parentNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
-          </a>
-          <%= formatRomanDate(p.birth_year, p.death_year) %>
-        </li>
-      <% }) %>
-    </ul>
+    <% if (confirmedParents.length > 0 || rumoredParents.length > 0) { %>
+      <h3>Biological Parents</h3>
+      <% if (confirmedParents.length > 0) { %>
+        <h4>Confirmed</h4>
+        <ul>
+          <% confirmedParents.forEach(p => { %>
+            <li>
+              <% const parentNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
+              <a href="/people/<%= p.id %>">
+                <%= `${p.praenomen}${parentNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+              </a>
+              <%= formatRomanDate(p.birth_year, p.death_year) %>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+      <% if (rumoredParents.length > 0) { %>
+        <h4>Rumored</h4>
+        <ul>
+          <% rumoredParents.forEach(p => { %>
+            <li>
+              <% const parentNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
+              <a href="/people/<%= p.id %>">
+                <%= `${p.praenomen}${parentNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+              </a>
+              <%= formatRomanDate(p.birth_year, p.death_year) %>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    <% } %>
+
+    <% if (confirmedAdoptiveParents.length > 0 || rumoredAdoptiveParents.length > 0) { %>
+      <h3>Adoptive Parents</h3>
+      <% if (confirmedAdoptiveParents.length > 0) { %>
+        <h4>Confirmed</h4>
+        <ul>
+          <% confirmedAdoptiveParents.forEach(p => { %>
+            <li>
+              <% const parentNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
+              <a href="/people/<%= p.id %>">
+                <%= `${p.praenomen}${parentNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+              </a>
+              <%= formatRomanDate(p.birth_year, p.death_year) %>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+      <% if (rumoredAdoptiveParents.length > 0) { %>
+        <h4>Rumored</h4>
+        <ul>
+          <% rumoredAdoptiveParents.forEach(p => { %>
+            <li>
+              <% const parentNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
+              <a href="/people/<%= p.id %>">
+                <%= `${p.praenomen}${parentNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+              </a>
+              <%= formatRomanDate(p.birth_year, p.death_year) %>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    <% } %>
   <% } %>
 
   <h2>Children</h2>
@@ -66,6 +121,40 @@
         </li>
       <% }) %>
     </ul>
+  <% } %>
+
+  <h2>Partners</h2>
+  <% if (partners.length === 0 && rumoredPartners.length === 0) { %>
+    <p>No partners recorded.</p>
+  <% } else { %>
+    <% if (partners.length > 0) { %>
+      <h3>Confirmed</h3>
+      <ul>
+        <% partners.forEach(p => { %>
+          <li>
+            <% const partnerNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
+            <a href="/people/<%= p.id %>">
+              <%= `${p.praenomen}${partnerNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+            </a>
+            <%= formatRomanDate(p.birth_year, p.death_year) %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+    <% if (rumoredPartners.length > 0) { %>
+      <h3>Rumored</h3>
+      <ul>
+        <% rumoredPartners.forEach(p => { %>
+          <li>
+            <% const partnerNomen = p.is_bastard ? '' : ` ${genderifyNomen(p.nomen, p.sex)}`; %>
+            <a href="/people/<%= p.id %>">
+              <%= `${p.praenomen}${partnerNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+            </a>
+            <%= formatRomanDate(p.birth_year, p.death_year) %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
   <% } %>
 
   <hr>

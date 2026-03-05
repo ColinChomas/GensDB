@@ -10,6 +10,7 @@
   <form method="POST" action="/relationships/add">
     <label>Parent:</label><br>
     <select name="parent_id">
+      <option value="">None</option>
       <% people.forEach(p => { %>
         <option value="<%= p.id %>">
           <%= p.praenomen %><%= p.is_bastard ? '' : ' ' + p.nomen %><%= p.cognomen ? ' ' + p.cognomen : '' %>
@@ -19,6 +20,7 @@
 
     <label>Child:</label><br>
     <select name="child_id">
+      <option value="">None</option>
       <% people.forEach(p => { %>
         <option value="<%= p.id %>">
           <%= p.praenomen %><%= p.is_bastard ? '' : ' ' + p.nomen %><%= p.cognomen ? ' ' + p.cognomen : '' %>

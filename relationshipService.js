@@ -1,10 +1,10 @@
 const db = require('./db');
 
-async function addParentChild(parentId, childId, relationshipType = 'biological') {
+async function addParentChild(parentId, childId, relationshipType = 'biological', status = 'confirmed') {
   await db.execute(
-    `INSERT INTO parent_child (parent_id, child_id, relationship_type)
-     VALUES (?, ?, ?)`,
-    [parentId, childId, relationshipType]
+    `INSERT INTO parent_child (parent_id, child_id, relationship_type, status)
+     VALUES (?, ?, ?, ?)`,
+    [parentId, childId, relationshipType, status]
   );
 }
 

@@ -80,6 +80,71 @@
       <% }) %>
     </select><br><br>
 
+    <button type="button" id="add-rumored-parent-btn" onclick="addRumoredParentField()">+ Add Rumored Parent</button><br><br>
+
+    <div id="rumored-parents-container" style="display: none; margin: 20px 0; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px;">
+      <h4>Rumored Parents</h4>
+      <div id="rumored-parents-list"></div>
+    </div>
+
+    <label>
+      <input type="checkbox" name="has_adoptive_parents" id="has-adoptive-parents">
+      Has Adoptive Parents
+    </label><br><br>
+
+    <div id="adoptive-parents-section" style="display: none;">
+      <h3>Adoptive Parents</h3>
+
+      <label>Adoptive Father:</label><br>
+      <select name="adoptive_father_id" class="searchable-select">
+        <option value="">None</option>
+        <% people.filter(p => p.sex === 1).forEach(p => { %>
+          <% const fatherNomen = p.is_bastard ? '' : ` ${genderifyNomen(houses.find(h => h.id === p.house_id).gens_name, 1)}`; %>
+          <option value="<%= p.id %>">
+            <%= `${p.praenomen}${fatherNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+            <% if (p.birth_year) { %> (<%= p.birth_year %>) <% } %>
+          </option>
+        <% }) %>
+      </select><br><br>
+
+      <label>Adoptive Father Status:</label><br>
+      <select name="adoptive_father_status">
+        <option value="confirmed" selected>Confirmed</option>
+        <option value="rumored">Rumored</option>
+      </select><br><br>
+
+      <label>Adoptive Mother:</label><br>
+      <select name="adoptive_mother_id" class="searchable-select">
+        <option value="">None</option>
+        <% people.filter(p => p.sex === 0).forEach(p => { %>
+          <% const motherNomen = p.is_bastard ? '' : ` ${genderifyNomen(houses.find(h => h.id === p.house_id).gens_name, 0)}`; %>
+          <option value="<%= p.id %>">
+            <%= `${p.praenomen}${motherNomen}${p.cognomen ? ' ' + p.cognomen : ''}` %>
+            <% if (p.birth_year) { %> (<%= p.birth_year %>) <% } %>
+          </option>
+        <% }) %>
+      </select><br><br>
+
+      <label>Adoptive Mother Status:</label><br>
+      <select name="adoptive_mother_status">
+        <option value="confirmed" selected>Confirmed</option>
+        <option value="rumored">Rumored</option>
+      </select><br><br>
+
+      <label>Adoptive House (Gens):</label><br>
+      <select name="adoptive_house_id" class="searchable-select">
+        <option value="">None</option>
+        <% houses.forEach(h => { %>
+          <option value="<%= h.id %>"><%= h.gens_name %></option>
+        <% }) %>
+      </select><br><br>
+    </div>
+
+    <h3>Partners</h3>
+    <p><em>Note: Partnerships can be added after the person is created. You can add them on the edit page.</em></p>
+
+    <hr style="margin: 30px 0;">
+
     <button type="submit">Create Person</button>
   </form>
 
@@ -89,11 +154,79 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <script>
+    // Pre-populate people data for JavaScript use
+    const peopleData = [
+      <% people.forEach((p, idx) => { %>
+        {
+          id: <%= p.id %>,
+          praenomen: '<%= p.praenomen %>',
+          nomen: '<%= p.is_bastard ? '' : genderifyNomen(houses.find(h => h.id === p.house_id).gens_name, p.sex) %>',
+          cognomen: '<%= p.cognomen || '' %>',
+          birth_year: <%= p.birth_year || 'null' %>
+        }<%= idx < people.length - 1 ? ',' : '' %>
+      <% }) %>
+    ];
+
     $(document).ready(function() {
       $('.searchable-select').select2({
         placeholder: 'Search...'
       });
+
+      $('#has-adoptive-parents').change(function() {
+        if (this.checked) {
+          $('#adoptive-parents-section').show();
+        } else {
+          $('#adoptive-parents-section').hide();
+        }
+      });
     });
+
+    let rumoredParentCount = 0;
+
+    function addRumoredParentField() {
+      const container = document.getElementById('rumored-parents-container');
+      container.style.display = 'block';
+
+      const listContainer = document.getElementById('rumored-parents-list');
+      const fieldId = 'rumored-parent-' + rumoredParentCount;
+
+      let optionsHtml = '<option value="">None</option>';
+      peopleData.forEach(p => {
+        const fullName = p.praenomen + (p.nomen ? ' ' + p.nomen : '') + (p.cognomen ? ' ' + p.cognomen : '');
+        const birthYear = p.birth_year ? ' (' + p.birth_year + ')' : '';
+        optionsHtml += `<option value="${p.id}">${fullName}${birthYear}</option>`;
+      });
+
+      const fieldHtml = `
+        <div id="${fieldId}" style="margin-bottom: 15px; padding: 10px; background: white; border: 1px solid #e0e0e0; border-radius: 3px;">
+          <label>Rumored Parent:</label><br>
+          <select name="rumored_parent_ids" class="searchable-select" style="width: 100%; margin-bottom: 10px;">
+            ${optionsHtml}
+          </select>
+          <button type="button" onclick="removeRumoredParentField('${fieldId}')" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Remove</button>
+        </div>
+      `;
+
+      listContainer.insertAdjacentHTML('beforeend', fieldHtml);
+      
+      // Reinitialize select2 for new dropdown
+      $(`#${fieldId} .searchable-select`).select2({
+        placeholder: 'Search...'
+      });
+
+      rumoredParentCount++;
+    }
+
+    function removeRumoredParentField(fieldId) {
+      const field = document.getElementById(fieldId);
+      field.remove();
+
+      // Hide container if no rumored parents left
+      const listContainer = document.getElementById('rumored-parents-list');
+      if (listContainer.children.length === 0) {
+        document.getElementById('rumored-parents-container').style.display = 'none';
+      }
+    }
   </script>
 </body>
 </html>

@@ -85,20 +85,24 @@
     <% people.forEach(p => { %>
       <% 
         // Find the house for this person
-        const house = houses.find(h => h.id === p.house_id);
+        const birthHouse = houses.find(h => h.id === p.house_id);
+        const adoptiveHouse = p.adoptive_house_id ? houses.find(h => h.id === p.adoptive_house_id) : null;
+        
+        // Use adoptive house if available, otherwise birth house
+        const displayHouse = adoptiveHouse || birthHouse;
 
         // Gender-corrected nomen (Julius / Julia)
-        const nomen = p.is_bastard ? '' : genderifyNomen(house.gens_name, p.sex);
+        const nomen = p.is_bastard ? '' : genderifyNomen(displayHouse.gens_name, p.sex);
 
         // Build full Roman name
         const fullName = `${p.praenomen}${nomen ? ' ' + nomen : ''}${p.cognomen ? ' ' + p.cognomen : ''}`;
       %>
 
-      <tr class="people-row" data-name="<%= fullName.toLowerCase() %>" data-sex="<%= p.sex === 1 ? 'Male' : 'Female' %>" data-house="<%= house.gens_name %>">
+      <tr class="people-row" data-name="<%= fullName.toLowerCase() %>" data-sex="<%= p.sex === 1 ? 'Male' : 'Female' %>" data-house="<%= displayHouse.gens_name %>">
         <td><a href="/people/<%= p.id %>"><%= fullName %></a></td>
 
         <!-- Raw gens name (Julia, Cornelia, etc.) -->
-        <td><%= house.gens_name %></td>
+        <td><%= displayHouse.gens_name %><% if (adoptiveHouse) { %> (adopted)<% } %></td>
 
         <td><%= p.sex === 1 ? 'Male' : 'Female' %></td>
 

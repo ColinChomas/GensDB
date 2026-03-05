@@ -32,7 +32,7 @@ async function getAllPeople() {
 
 async function getChildren(personId) {
   const [rows] = await db.execute(
-    `SELECT p.*
+    `SELECT p.*, pc.status as parent_status, pc.relationship_type
      FROM parent_child pc
      JOIN person p ON pc.child_id = p.id
      WHERE pc.parent_id = ?
@@ -68,8 +68,14 @@ function formatDisplayName(person) {
   return `${person.praenomen}${nomenPart}${cognomenPart}`;
 }
 
-async function buildTree(person, prefix = '', isLast = true, seen = new Set(), depth = 0, treeHouseId = null) {
-  const branch = prefix + (isLast ? '└── ' : '├── ');
+async function buildTree(person, prefix = '', isLast = true, seen = new Set(), depth = 0, treeHouseId = null, parentStatus = 'confirmed') {
+  // For rumored parent relationships, use ├?─ or └?─ instead of normal branch characters
+  let branch;
+  if (parentStatus === 'rumored') {
+    branch = prefix + (isLast ? '└?─ ' : '├?─ ');
+  } else {
+    branch = prefix + (isLast ? '└── ' : '├── ');
+  }
 
   // Gendered nomen
   const nomen = genderifyNomen(person.nomen, person.sex);
@@ -106,7 +112,14 @@ async function buildTree(person, prefix = '', isLast = true, seen = new Set(), d
       const childNomen = genderifyNomen(child.nomen, child.sex);
       const childDateStr = formatRomanDate(child.birth_year, child.death_year);
       const childNameHtml = `<a href="/people/${child.id}">${formatDisplayName(child)}</a>`;
-      const childBranch = newPrefix + (last ? '└── ' : '├── ');
+      
+      // Determine branch for child based on parent status
+      let childBranch;
+      if (child.parent_status === 'rumored') {
+        childBranch = newPrefix + (last ? '└?─ ' : '├?─ ');
+      } else {
+        childBranch = newPrefix + (last ? '└── ' : '├── ');
+      }
       
       // Check if any grandchildren are in the original tree house
       const grandchildren = await getChildren(child.id);
@@ -129,12 +142,12 @@ async function buildTree(person, prefix = '', isLast = true, seen = new Set(), d
         for (let j = 0; j < grandchildrenInTreeHouse.length; j++) {
           const grandchild = grandchildrenInTreeHouse[j];
           const gcLast = j === grandchildrenInTreeHouse.length - 1;
-          output += await buildTree(grandchild, grandchildPrefix, gcLast, seen, depth + 2, treeHouseId);
+          output += await buildTree(grandchild, grandchildPrefix, gcLast, seen, depth + 2, treeHouseId, grandchild.parent_status);
         }
       }
     } else {
       // Child is in the same house, recurse normally
-      output += await buildTree(child, newPrefix, last, seen, depth + 1, treeHouseId);
+      output += await buildTree(child, newPrefix, last, seen, depth + 1, treeHouseId, child.parent_status);
     }
   }
 
@@ -230,15 +243,38 @@ app.post('/people/add', async (req, res) => {
     cognomen: req.body.cognomen || null,
     isBastard: req.body.is_bastard === 'on',
     birthYear: req.body.birth_year || null,
-    deathYear: req.body.death_year || null
+    deathYear: req.body.death_year || null,
+    adoptiveHouseId: req.body.adoptive_house_id ? parseInt(req.body.adoptive_house_id) : null
   });
 
-  // Add parents if selected
+  // Add biological father (always confirmed)
   if (req.body.father_id) {
-    await addParentChild(req.body.father_id, personId, 'biological');
+    await addParentChild(req.body.father_id, personId, 'biological', 'confirmed');
   }
+  // Add biological mother (always confirmed)
   if (req.body.mother_id) {
-    await addParentChild(req.body.mother_id, personId, 'biological');
+    await addParentChild(req.body.mother_id, personId, 'biological', 'confirmed');
+  }
+  // Add rumored biological parents
+  if (req.body.rumored_parent_ids) {
+    const rumoredIds = Array.isArray(req.body.rumored_parent_ids) 
+      ? req.body.rumored_parent_ids 
+      : [req.body.rumored_parent_ids];
+    for (const parentId of rumoredIds) {
+      if (parentId) {
+        await addParentChild(parentId, personId, 'biological', 'rumored');
+      }
+    }
+  }
+
+  // Add adoptive parents if selected
+  if (req.body.adoptive_father_id) {
+    const adoptiveFatherStatus = req.body.adoptive_father_status || 'confirmed';
+    await addParentChild(req.body.adoptive_father_id, personId, 'adoptive', adoptiveFatherStatus);
+  }
+  if (req.body.adoptive_mother_id) {
+    const adoptiveMotherStatus = req.body.adoptive_mother_status || 'confirmed';
+    await addParentChild(req.body.adoptive_mother_id, personId, 'adoptive', adoptiveMotherStatus);
   }
 
   res.redirect('/people');
@@ -250,18 +286,37 @@ app.get('/people/:id', async (req, res) => {
 
   const houses = await getAllHouses();
   const house = houses.find(h => h.id === person.house_id);
+  const adoptiveHouse = person.adoptive_house_id ? houses.find(h => h.id === person.adoptive_house_id) : null;
 
-  // Gendered nomen
-  const nomen = person.is_bastard ? '' : genderifyNomen(person.nomen, person.sex);
+  // Use adoptive house nomen if they're adopted, otherwise use birth house nomen
+  const displayHouse = adoptiveHouse || house;
+  const nomen = person.is_bastard ? '' : genderifyNomen(displayHouse.gens_name, person.sex);
 
-  // Parents
-  const [parents] = await db.execute(
-    `SELECT p.*
+  // Biological parents with status
+  const [bioParentsData] = await db.execute(
+    `SELECT p.*, pc.status
      FROM parent_child pc
      JOIN person p ON pc.parent_id = p.id
-     WHERE pc.child_id = ?`,
+     WHERE pc.child_id = ? AND pc.relationship_type = 'biological'`,
     [person.id]
   );
+
+  // Separate confirmed and rumored biological parents
+  const confirmedParents = bioParentsData.filter(p => p.status === 'confirmed');
+  const rumoredParents = bioParentsData.filter(p => p.status === 'rumored');
+
+  // Adoptive parents with status
+  const [adoptiveParentsData] = await db.execute(
+    `SELECT p.*, pc.status
+     FROM parent_child pc
+     JOIN person p ON pc.parent_id = p.id
+     WHERE pc.child_id = ? AND pc.relationship_type = 'adoptive'`,
+    [person.id]
+  );
+
+  // Separate confirmed and rumored adoptive parents
+  const confirmedAdoptiveParents = adoptiveParentsData.filter(p => p.status === 'confirmed');
+  const rumoredAdoptiveParents = adoptiveParentsData.filter(p => p.status === 'rumored');
 
   // Children
   const [children] = await db.execute(
@@ -283,13 +338,39 @@ app.get('/people/:id', async (req, res) => {
     [person.id, person.id]
   );
 
+  // Partners = people with explicit partnership relationships
+  const [partnersData] = await db.execute(
+    `SELECT DISTINCT p.*
+     FROM partnership pt
+     JOIN person p ON (pt.person2_id = p.id AND pt.person1_id = ?)
+        OR (pt.person1_id = p.id AND pt.person2_id = ?)
+     WHERE pt.status = 'confirmed'`,
+    [person.id, person.id]
+  );
+
+  // Rumored partners
+  const [rumoredPartnersData] = await db.execute(
+    `SELECT DISTINCT p.*
+     FROM partnership pt
+     JOIN person p ON (pt.person2_id = p.id AND pt.person1_id = ?)
+        OR (pt.person1_id = p.id AND pt.person2_id = ?)
+     WHERE pt.status = 'rumored'`,
+    [person.id, person.id]
+  );
+
   res.render('person', {
     person,
     house,
+    adoptiveHouse,
     nomen,
-    parents,
+    confirmedParents,
+    rumoredParents,
+    confirmedAdoptiveParents,
+    rumoredAdoptiveParents,
     children,
     siblings,
+    partners: partnersData,
+    rumoredPartners: rumoredPartnersData,
     genderifyNomen,
     formatRomanDate
   });
@@ -315,17 +396,59 @@ app.get('/people/edit/:id', async (req, res) => {
   const houses = await getAllHouses();
   const people = await getAllPeople();
 
-  // Get parents
-  const [parents] = await db.execute(
-    `SELECT p.*
+  // Get confirmed biological parents
+  const [bioParentsData] = await db.execute(
+    `SELECT p.*, pc.status, pc.relationship_type
      FROM parent_child pc
      JOIN person p ON pc.parent_id = p.id
-     WHERE pc.child_id = ?`,
+     WHERE pc.child_id = ? AND pc.relationship_type = 'biological' AND pc.status = 'confirmed'`,
     [person.id]
   );
 
-  const father = parents.find(p => p.sex === 1) || null;
-  const mother = parents.find(p => p.sex === 0) || null;
+  const father = bioParentsData.find(p => p.sex === 1) || null;
+  const mother = bioParentsData.find(p => p.sex === 0) || null;
+
+  // Get all biological parents (confirmed and rumored)
+  const [allBioParentsData] = await db.execute(
+    `SELECT p.*, pc.status, pc.relationship_type
+     FROM parent_child pc
+     JOIN person p ON pc.parent_id = p.id
+     WHERE pc.child_id = ? AND pc.relationship_type = 'biological'`,
+    [person.id]
+  );
+
+  // Get confirmed adoptive parents
+  const [adoptiveParentsData] = await db.execute(
+    `SELECT p.*, pc.status, pc.relationship_type
+     FROM parent_child pc
+     JOIN person p ON pc.parent_id = p.id
+     WHERE pc.child_id = ? AND pc.relationship_type = 'adoptive' AND pc.status = 'confirmed'`,
+    [person.id]
+  );
+
+  const adoptiveFather = adoptiveParentsData.find(p => p.sex === 1) || null;
+  const adoptiveMother = adoptiveParentsData.find(p => p.sex === 0) || null;
+
+  // Get all adoptive parents (confirmed and rumored)
+  const [allAdoptiveParentsData] = await db.execute(
+    `SELECT p.*, pc.status, pc.relationship_type
+     FROM parent_child pc
+     JOIN person p ON pc.parent_id = p.id
+     WHERE pc.child_id = ? AND pc.relationship_type = 'adoptive'`,
+    [person.id]
+  );
+
+  // Get partners
+  const [partnersData] = await db.execute(
+    `SELECT DISTINCT p.*, pt.status
+     FROM partnership pt
+     JOIN person p ON (pt.person2_id = p.id AND pt.person1_id = ?)
+        OR (pt.person1_id = p.id AND pt.person2_id = ?)`,
+    [person.id, person.id]
+  );
+
+  const confirmedPartners = partnersData.filter(p => p.status === 'confirmed');
+  const rumoredPartners = partnersData.filter(p => p.status === 'rumored');
 
   res.render('edit-person', {
     person,
@@ -333,6 +456,11 @@ app.get('/people/edit/:id', async (req, res) => {
     people,
     father,
     mother,
+    adoptiveFather,
+    adoptiveMother,
+    confirmedPartners,
+    rumoredPartners,
+    allParents: allBioParentsData,
     genderifyNomen
   });
 });
@@ -342,10 +470,11 @@ app.post('/people/edit/:id', async (req, res) => {
 
   await db.execute(
     `UPDATE person
-     SET house_id = ?, sex = ?, praenomen = ?, cognomen = ?, is_bastard = ?, birth_year = ?, death_year = ?
+     SET house_id = ?, adoptive_house_id = ?, sex = ?, praenomen = ?, cognomen = ?, is_bastard = ?, birth_year = ?, death_year = ?
      WHERE id = ?`,
     [
       req.body.house_id,
+      req.body.adoptive_house_id ? parseInt(req.body.adoptive_house_id) : null,
       req.body.sex,
       req.body.praenomen,
       req.body.cognomen || null,
@@ -359,17 +488,88 @@ app.post('/people/edit/:id', async (req, res) => {
   // Remove old parents
   await db.execute(`DELETE FROM parent_child WHERE child_id = ?`, [personId]);
 
-  // Add new father
+  // Add biological father (always confirmed)
   if (req.body.father_id) {
-    await addParentChild(req.body.father_id, personId, 'biological');
+    await addParentChild(req.body.father_id, personId, 'biological', 'confirmed');
   }
 
-  // Add new mother
+  // Add biological mother (always confirmed)
   if (req.body.mother_id) {
-    await addParentChild(req.body.mother_id, personId, 'biological');
+    await addParentChild(req.body.mother_id, personId, 'biological', 'confirmed');
+  }
+
+  // Add rumored biological parents
+  if (req.body.rumored_parent_ids) {
+    const rumoredIds = Array.isArray(req.body.rumored_parent_ids) 
+      ? req.body.rumored_parent_ids 
+      : [req.body.rumored_parent_ids];
+    for (const parentId of rumoredIds) {
+      if (parentId) {
+        await addParentChild(parentId, personId, 'biological', 'rumored');
+      }
+    }
+  }
+
+  // Add adoptive father if selected
+  if (req.body.adoptive_father_id) {
+    const adoptiveFatherStatus = req.body.adoptive_father_status || 'confirmed';
+    await addParentChild(req.body.adoptive_father_id, personId, 'adoptive', adoptiveFatherStatus);
+  }
+
+  // Add adoptive mother if selected
+  if (req.body.adoptive_mother_id) {
+    const adoptiveMotherStatus = req.body.adoptive_mother_status || 'confirmed';
+    await addParentChild(req.body.adoptive_mother_id, personId, 'adoptive', adoptiveMotherStatus);
   }
 
   res.redirect('/people/' + personId);
+});
+
+// ========== Partnership Routes ==========
+
+// Add a partnership between two people
+app.post('/partnership/add', async (req, res) => {
+  const { person1_id, person2_id, status } = req.body;
+  
+  if (!person1_id || !person2_id) {
+    return res.status(400).json({ error: 'Both person IDs are required' });
+  }
+
+  if (person1_id === person2_id) {
+    return res.status(400).json({ error: 'Cannot create partnership with the same person' });
+  }
+
+  const partnershipStatus = status === 'rumored' ? 'rumored' : 'confirmed';
+
+  try {
+    await db.execute(
+      `INSERT INTO partnership (person1_id, person2_id, status) VALUES (?, ?, ?)`,
+      [person1_id, person2_id, partnershipStatus]
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error adding partnership:', error);
+    return res.status(500).json({ error: 'Failed to add partnership' });
+  }
+});
+
+// Remove a partnership between two people
+app.post('/partnership/remove/:person1Id/:person2Id', async (req, res) => {
+  const person1Id = parseInt(req.params.person1Id);
+  const person2Id = parseInt(req.params.person2Id);
+
+  try {
+    // Remove partnership in either direction
+    await db.execute(
+      `DELETE FROM partnership 
+       WHERE (person1_id = ? AND person2_id = ?) OR (person1_id = ? AND person2_id = ?)`,
+      [person1Id, person2Id, person2Id, person1Id]
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing partnership:', error);
+    return res.status(500).json({ error: 'Failed to remove partnership' });
+  }
 });
 
 // ========== Relationship Checker Routes ==========
