@@ -42,10 +42,13 @@
   </style>
 </head>
 <body>
-  <h1>People</h1>
+  <%- include('navbar') %>
 
-  <a href="/">← Back</a> |
-  <a href="/people/add">Add Person</a>
+  <main>
+    <h1>People</h1>
+
+    <a href="/">← Back</a> |
+    <a href="/people/add">Add Person</a>
 
   <div class="filter-section">
     <h3>Filters</h3>
@@ -155,5 +158,6 @@
     filterSex.addEventListener('change', applyFilters);
     filterHouse.addEventListener('change', applyFilters);
   </script>
+  </main>
 </body>
 </html>

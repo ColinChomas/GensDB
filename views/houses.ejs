@@ -5,23 +5,27 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Roman Houses (Gentes)</h1>
+  <%- include('navbar') %>
 
-  <a href="/">← Back</a> |
-  <a href="/houses/add">Add New House</a>
+  <main>
+    <h1>Roman Houses (Gentes)</h1>
 
-  <ul>
-    <% houses.forEach(h => { %>
-        <li>
-        <strong><%= h.gens_name %></strong>
-        <% if (h.founder_id) { %>
-            — <a href="/tree/<%= h.id %>">View Tree</a>
-        <% } else { %>
-            — <em>No founder set</em>
-        <% } %>
-        — <a href="/houses/edit/<%= h.id %>">Edit House</a>
-        </li>
-    <% }) %>
-  </ul>
+    <a href="/">← Back</a> |
+    <a href="/houses/add">Add New House</a>
+
+    <ul>
+      <% houses.forEach(h => { %>
+          <li>
+          <strong><%= h.gens_name %></strong>
+          <% if (h.founder_id) { %>
+              — <a href="/tree/<%= h.id %>">View Tree</a>
+          <% } else { %>
+              — <em>No founder set</em>
+          <% } %>
+              — <a href="/houses/edit/<%= h.id %>">Edit House</a>
+          </li>
+      <% }) %>
+    </ul>
+  </main>
 </body>
 </html>

@@ -5,12 +5,14 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <%- include('navbar') %>
 
-  <h1>
-    <%= person.praenomen %><%= nomen ? ' ' + nomen : '' %>
-    <% if (person.cognomen) { %> <%= person.cognomen %> <% } %>
-    <%= formatRomanDate(person.birth_year, person.death_year) %>
-  </h1>
+  <main>
+    <h1>
+      <%= person.praenomen %><%= nomen ? ' ' + nomen : '' %>
+      <% if (person.cognomen) { %> <%= person.cognomen %> <% } %>
+      <%= formatRomanDate(person.birth_year, person.death_year) %>
+    </h1>
 
   <p><strong>Birth House (Gens):</strong> <%= house.gens_name %></p>
   <% if (adoptiveHouse) { %>

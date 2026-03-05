@@ -1,3 +1,188 @@
+/* Theme Color Variables */
+:root {
+  --bg-primary: #fefcf8;
+  --bg-secondary: #f5ede2;
+  --bg-tertiary: #ede6d9;
+  --text-primary: #3a2415;
+  --text-secondary: #6b5038;
+  --border-color: #dfd2b8;
+  --nav-bg-light: #6b5038;
+  --nav-bg-dark: #3a2415;
+  --nav-bg-hover: #8b7355;
+  --nav-text: #fefcf8;
+  --nav-text-hover: #ffffff;
+  --button-bg: #6b5038;
+  --button-hover: #8b7355;
+  --card-shadow: rgba(0, 0, 0, 0.1);
+}
+
+/* Dark Parchment Theme */
+body.dark-parchment {
+  --bg-primary: #1a1410;
+  --bg-secondary: #2a2015;
+  --bg-tertiary: #3a3020;
+  --text-primary: #e8dcc8;
+  --text-secondary: #d4b896;
+  --border-color: #4a4030;
+  --nav-bg-light: #1a1410;
+  --nav-bg-dark: #0f0b08;
+  --nav-bg-hover: #3a3020;
+  --nav-text: #e8dcc8;
+  --nav-text-hover: #ffffff;
+  --button-bg: #6b5038;
+  --button-hover: #8b7355;
+  --card-shadow: rgba(0, 0, 0, 0.4);
+}
+
+/* Light Traditional Theme */
+body.light-traditional {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e8e8e8;
+  --text-primary: #1a1a1a;
+  --text-secondary: #2c3e50;
+  --border-color: #d0d0d0;
+  --nav-bg-light: #2c3e50;
+  --nav-bg-dark: #1a252f;
+  --nav-bg-hover: #34495e;
+  --nav-text: #f5f5f5;
+  --nav-text-hover: #ffffff;
+  --button-bg: #2c3e50;
+  --button-hover: #34495e;
+  --card-shadow: rgba(0, 0, 0, 0.08);
+}
+
+/* Dark Traditional Theme */
+body.dark-traditional {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #3d3d3d;
+  --text-primary: #e4e4e4;
+  --text-secondary: #b8b8b8;
+  --border-color: #4a4a4a;
+  --nav-bg-light: #0a0a0a;
+  --nav-bg-dark: #000000;
+  --nav-bg-hover: #3d3d3d;
+  --nav-text: #e4e4e4;
+  --nav-text-hover: #ffffff;
+  --button-bg: #2c3e50;
+  --button-hover: #34495e;
+  --card-shadow: rgba(0, 0, 0, 0.6);
+}
+
+/* Navigation Bar Styles */
+nav {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 0;
+  box-shadow: 0 2px 8px var(--card-shadow);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  margin: -12px -12px 12px -12px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+nav ul {
+  list-style: none;
+  display: flex;
+  margin: 0;
+  padding: 0;
+  align-items: center;
+}
+
+nav li {
+  position: relative;
+  margin: 0;
+}
+
+nav > ul > li > a {
+  display: block;
+  padding: 14px 20px;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+nav > ul > li > a:hover {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+nav ul ul {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  min-width: 200px;
+}
+
+nav li:hover > ul {
+  display: flex;
+}
+
+nav ul ul li {
+  margin: 0;
+  width: 100%;
+}
+
+nav ul ul li a {
+  display: block;
+  padding: 12px 20px;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+nav ul ul li a:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.navbar-title {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  font-weight: bold;
+  font-size: 16px;
+  margin-right: auto;
+  color: var(--text-primary);
+}
+
+.theme-dropdown {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 10px;
+  font-size: 13px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.theme-dropdown:hover {
+  background: var(--bg-tertiary);
+}
+
+.theme-dropdown option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Explicit nav styling for dark themes */
+body.dark-parchment nav {
+  background: #3a3020 !important;
+}
+
+body.dark-traditional nav {
+  background: #3d3d3d !important;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -6,10 +191,11 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background: linear-gradient(135deg, #ede6d9 0%, #dfd2b8 100%);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   padding: 12px;
-  color: #2a1810;
   min-height: 100vh;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 main {
@@ -20,22 +206,21 @@ main {
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   margin: 0.5rem 0 0.4rem 0;
-  color: #3a2415;
+  color: var(--text-secondary);
 }
 
 a {
-  color: #704d2e;
+  color: var(--text-secondary);
   text-decoration: none;
   transition: color 0.2s ease;
 }
 
 a:hover {
-  color: #502d15;
   text-decoration: underline;
 }
 
 button, input[type="submit"], input[type="button"] {
-  background: #6b5038;
+  background: var(--button-bg);
   color: #fff;
   border: none;
   padding: 6px 12px;
@@ -45,9 +230,6 @@ button, input[type="submit"], input[type="button"] {
   font-weight: 500;
   transition: transform 0.2s, box-shadow 0.2s;
 }
-
-button:hover, input[type="submit"]:hover, input[type="button"]:hover {
-  transform: translateY(-1px);
   background: #4a3825;
   box-shadow: 0 4px 8px rgba(75, 56, 37, 0.4);
 }

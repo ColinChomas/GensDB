@@ -5,9 +5,12 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Edit Gens <%= house.gens_name %></h1>
+  <%- include('navbar') %>
 
-  <a href="/houses">← Back</a>
+  <main>
+    <h1>Edit Gens <%= house.gens_name %></h1>
+
+    <a href="/houses">← Back</a>
 
   <hr>
 
@@ -94,6 +97,7 @@
 
     <button type="submit">Create Founder</button>
   </form>
+  </main>
 
 </body>
 </html>

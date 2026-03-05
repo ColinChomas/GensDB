@@ -20,7 +20,10 @@
   </style>
 </head>
 <body>
-  <h1>Edit Person</h1>
+  <%- include('navbar') %>
+
+  <main>
+    <h1>Edit Person</h1>
 
   <form method="POST" action="/people/edit/<%= person.id %>">
 
@@ -380,5 +383,6 @@
       }
     }
   </script>
+  </main>
 </body>
 </html>

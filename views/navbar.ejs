@@ -1,0 +1,70 @@
+<!-- Navigation Bar -->
+<nav>
+  <ul>
+    <li class="navbar-title">🏛️ Roman Family Tree</li>
+    
+    <li>
+      <a href="#">Houses</a>
+      <ul>
+        <li><a href="/houses">View All Houses</a></li>
+        <li><a href="/houses/add">Add New House</a></li>
+      </ul>
+    </li>
+
+    <li>
+      <a href="#">People</a>
+      <ul>
+        <li><a href="/people">View All People</a></li>
+        <li><a href="/people/add">Add Person</a></li>
+      </ul>
+    </li>
+
+    <li>
+      <a href="#">Tools</a>
+      <ul>
+        <li><a href="/relationships/check">Check Relationship</a></li>
+        <li><a href="/relationships/stats">Relationship Statistics</a></li>
+      </ul>
+    </li>
+
+    <select id="themeSelector" class="theme-dropdown" title="Select Theme">
+      <option value="light-parchment">🏛️ Light Parchment</option>
+      <option value="dark-parchment">🌙 Dark Parchment</option>
+      <option value="light-traditional">☀️ Light Traditional</option>
+      <option value="dark-traditional">🌑 Dark Traditional</option>
+    </select>
+  </ul>
+</nav>
+
+<script>
+  // Theme selector
+  const themeSelector = document.getElementById('themeSelector');
+  const body = document.body;
+
+  // Check if theme preference is saved
+  const savedTheme = localStorage.getItem('theme') || 'light-parchment';
+  themeSelector.value = savedTheme;
+  applyTheme(savedTheme);
+
+  // Theme selector change event
+  themeSelector.addEventListener('change', (e) => {
+    const selectedTheme = e.target.value;
+    applyTheme(selectedTheme);
+    localStorage.setItem('theme', selectedTheme);
+  });
+
+  function applyTheme(theme) {
+    // Remove all theme classes
+    body.classList.remove('dark-parchment', 'light-traditional', 'dark-traditional');
+    
+    // Apply selected theme
+    if (theme === 'dark-parchment') {
+      body.classList.add('dark-parchment');
+    } else if (theme === 'light-traditional') {
+      body.classList.add('light-traditional');
+    } else if (theme === 'dark-traditional') {
+      body.classList.add('dark-traditional');
+    }
+    // 'light-parchment' is the default (no class needed)
+  }
+</script>

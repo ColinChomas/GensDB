@@ -20,9 +20,12 @@
   </style>
 </head>
 <body>
-  <h1>Add a Person</h1>
+  <%- include('navbar') %>
 
-  <form method="POST" action="/people/add">
+  <main>
+    <h1>Add a Person</h1>
+
+    <form method="POST" action="/people/add">
 
     <label>Praenomen:</label><br>
     <input type="text" name="praenomen" required><br><br>
@@ -228,5 +231,6 @@
       }
     }
   </script>
+  </main>
 </body>
 </html>

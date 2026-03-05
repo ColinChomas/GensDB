@@ -5,16 +5,20 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Add a New Gens (House)</h1>
+  <%- include('navbar') %>
 
-  <form method="POST" action="/houses/add">
-    <label>Gens Name:</label><br>
-    <input type="text" name="gens_name" required><br><br>
+  <main>
+    <h1>Add a New Gens (House)</h1>
 
-    <button type="submit">Create House</button>
-  </form>
+    <form method="POST" action="/houses/add">
+      <label>Gens Name:</label><br>
+      <input type="text" name="gens_name" required><br><br>
 
-  <br>
-  <a href="/houses">Back</a>
+      <button type="submit">Create House</button>
+    </form>
+
+    <br>
+    <a href="/houses">Back</a>
+  </main>
 </body>
 </html>
