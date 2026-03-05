@@ -90,6 +90,9 @@ pre {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
   border: 1px solid #b59d8a;
   color: #2a1810;
+  display: block;
+  overflow-x: auto;
+  overflow-y: auto;
 }
 
 .tree-link {

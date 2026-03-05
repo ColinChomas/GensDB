@@ -159,10 +159,51 @@
 
   <hr>
 
+  <div style="margin-bottom: 15px;">
+    <button type="button" id="family-tree-btn" onclick="openFamilyTreeModal()" style="background: #6b5038; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; margin-right: 10px;">📊 View Family Tree</button>
+  </div>
+  
   <a href="/people/edit/<%= person.id %>">Edit Person</a> |
   <a href="/people/<%= person.id %>/relationships">View All Relationships</a> |
-  <a href="/tree/<%= house.id %>">View Family Tree</a> |
+  <a href="/tree/<%= house.id %>">View Full House Tree</a> |
   <a href="/people">Back to People</a>
+
+  <!-- Family Tree Modal -->
+  <div id="family-tree-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; overflow: auto;">
+    <div style="background: #fefcf8; margin: 20px auto; padding: 20px; border-radius: 6px; max-width: 95%; border: 1px solid #b59d8a; position: relative;">
+      <button type="button" onclick="closeFamilyTreeModal()" style="position: absolute; top: 10px; right: 10px; background: #6b5038; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Close</button>
+      <h2 style="margin-top: 0;">Family Tree - <%= person.praenomen %></h2>
+      <div id="family-tree-content"></div>
+    </div>
+  </div>
+
+  <script>
+    function openFamilyTreeModal() {
+      document.getElementById('family-tree-modal').style.display = 'block';
+      
+      // Fetch the limited family tree from the server
+      fetch(`/people/<%= person.id %>/family-tree-limited`)
+        .then(response => response.text())
+        .then(treeHtml => {
+          document.getElementById('family-tree-content').innerHTML = treeHtml;
+        })
+        .catch(error => {
+          document.getElementById('family-tree-content').innerHTML = '<p>Error loading family tree</p>';
+        });
+    }
+
+    function closeFamilyTreeModal() {
+      document.getElementById('family-tree-modal').style.display = 'none';
+    }
+
+    // Close modal when clicking outside of it
+    window.onclick = function(event) {
+      const modal = document.getElementById('family-tree-modal');
+      if (event.target == modal) {
+        modal.style.display = 'none';
+      }
+    }
+  </script>
 
 </body>
 </html>

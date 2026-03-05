@@ -68,6 +68,92 @@ function formatDisplayName(person) {
   return `${person.praenomen}${nomenPart}${cognomenPart}`;
 }
 
+// Limited tree building for modal (grandparents to grandchildren only)
+async function buildTreeLimited(person, prefix = '', isLast = true, seen = new Set(), depth = 0, treeHouseId = null, parentStatus = 'confirmed', maxDepth = 10, targetPersonId = null) {
+  // Stop if we exceed max depth
+  if (depth > maxDepth) {
+    return '';
+  }
+
+  let branch;
+  if (parentStatus === 'rumored') {
+    branch = prefix + (isLast ? '└?─ ' : '├?─ ');
+  } else {
+    branch = prefix + (isLast ? '└── ' : '├── ');
+  }
+
+  const nomen = genderifyNomen(person.nomen, person.sex);
+  const dateStr = formatRomanDate(person.birth_year, person.death_year);
+
+  const nameHtml = `<a href="/people/${person.id}">${formatDisplayName(person)}</a>`;
+  
+  // Bold the target person
+  let displayName = nameHtml;
+  if (person.id === targetPersonId) {
+    displayName = `<b>${nameHtml}</b>`;
+  }
+
+  if (treeHouseId === null) {
+    treeHouseId = person.house_id;
+  }
+
+  if (seen.has(person.id)) {
+    const repeatHtml = `${branch}${displayName} ${dateStr} <a href="#person-${person.id}">[see above]</a>`;
+    return `${repeatHtml}\n`;
+  }
+
+  seen.add(person.id);
+  const anchoredNameHtml = `<span id="person-${person.id}">${displayName}</span>`;
+  let output = `${branch}${anchoredNameHtml} ${dateStr}\n`;
+
+  const children = await getChildren(person.id);
+  const newPrefix = prefix + (isLast ? '    ' : '│   ');
+
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    const last = i === children.length - 1;
+    
+    if (child.house_id !== treeHouseId) {
+      const childNomen = genderifyNomen(child.nomen, child.sex);
+      const childDateStr = formatRomanDate(child.birth_year, child.death_year);
+      const childNameHtml = `<a href="/people/${child.id}">${formatDisplayName(child)}</a>`;
+      
+      let childBranch;
+      if (child.parent_status === 'rumored') {
+        childBranch = newPrefix + (last ? '└?─ ' : '├?─ ');
+      } else {
+        childBranch = newPrefix + (last ? '└── ' : '├── ');
+      }
+      
+      const grandchildren = await getChildren(child.id);
+      const grandchildrenInTreeHouse = grandchildren.filter(gc => gc.house_id === treeHouseId);
+      const grandchildrenNotInTreeHouse = grandchildren.filter(gc => gc.house_id !== treeHouseId);
+      
+      let houseLink = '';
+      if (grandchildrenNotInTreeHouse.length > 0) {
+        const [houseRows] = await db.execute('SELECT * FROM house WHERE id = ?', [child.house_id]);
+        const childHouse = houseRows[0];
+        houseLink = childHouse ? ` → <a href="/tree/${childHouse.id}">View ${childHouse.gens_name} tree</a>` : '';
+      }
+      
+      output += `${childBranch}${childNameHtml} ${childDateStr}${houseLink}\n`;
+      
+      if (grandchildrenInTreeHouse.length > 0 && depth + 1 <= maxDepth) {
+        const grandchildPrefix = newPrefix + (last ? '    ' : '│   ');
+        for (let j = 0; j < grandchildrenInTreeHouse.length; j++) {
+          const grandchild = grandchildrenInTreeHouse[j];
+          const gcLast = j === grandchildrenInTreeHouse.length - 1;
+          output += await buildTreeLimited(grandchild, grandchildPrefix, gcLast, seen, depth + 2, treeHouseId, grandchild.parent_status, maxDepth, targetPersonId);
+        }
+      }
+    } else {
+      output += await buildTreeLimited(child, newPrefix, last, seen, depth + 1, treeHouseId, child.parent_status, maxDepth, targetPersonId);
+    }
+  }
+
+  return output;
+}
+
 async function buildTree(person, prefix = '', isLast = true, seen = new Set(), depth = 0, treeHouseId = null, parentStatus = 'confirmed') {
   // For rumored parent relationships, use ├?─ or └?─ instead of normal branch characters
   let branch;
@@ -358,6 +444,26 @@ app.get('/people/:id', async (req, res) => {
     [person.id, person.id]
   );
 
+  // Grandparents (parents of the person's parents)
+  const [grandparents] = await db.execute(
+    `SELECT DISTINCT gp.*
+     FROM parent_child pc1
+     JOIN parent_child pc2 ON pc1.parent_id = pc2.child_id
+     JOIN person gp ON pc2.parent_id = gp.id
+     WHERE pc1.child_id = ?`,
+    [person.id]
+  );
+
+  // Grandchildren (children of the person's children)
+  const [grandchildren] = await db.execute(
+    `SELECT DISTINCT gc.*
+     FROM parent_child pc1
+     JOIN parent_child pc2 ON pc1.child_id = pc2.parent_id
+     JOIN person gc ON pc2.child_id = gc.id
+     WHERE pc1.parent_id = ?`,
+    [person.id]
+  );
+
   res.render('person', {
     person,
     house,
@@ -371,9 +477,52 @@ app.get('/people/:id', async (req, res) => {
     siblings,
     partners: partnersData,
     rumoredPartners: rumoredPartnersData,
+    grandparents,
+    grandchildren,
     genderifyNomen,
     formatRomanDate
   });
+});
+
+// Build a limited family tree for a person (grandparents through grandchildren)
+app.get('/people/:id/family-tree-limited', async (req, res) => {
+  const person = await getPersonById(req.params.id);
+  if (!person) return res.send("Person not found");
+
+  let root = person;
+  let maxDepth = 4; // Show up to depth 4 (grandparents to grandchildren)
+  
+  // Try to find the highest ancestor (grandparent)
+  const [parents] = await db.execute(
+    `SELECT p.*, pc.status as parent_status FROM parent_child pc 
+     JOIN person p ON pc.parent_id = p.id 
+     WHERE pc.child_id = ? LIMIT 1`,
+    [person.id]
+  );
+  
+  if (parents.length > 0) {
+    root = parents[0];
+    
+    const [grandparents] = await db.execute(
+      `SELECT p.*, pc.status as parent_status FROM parent_child pc 
+       JOIN person p ON pc.parent_id = p.id 
+       WHERE pc.child_id = ? LIMIT 1`,
+      [root.id]
+    );
+    
+    if (grandparents.length > 0) {
+      root = grandparents[0];
+    }
+  }
+
+  // Build the tree with depth limit and person highlighting
+  const tree = await buildTreeLimited(root, '', true, new Set(), 0, null, 'confirmed', maxDepth, person.id);
+  
+  let treeHtml = '<div class="tree" style="white-space: pre; font-family: monospace; font-size: 13px;">';
+  treeHtml += tree;
+  treeHtml += '</div>';
+  
+  res.send(treeHtml);
 });
 
 app.get('/tree/:houseId', async (req, res) => {
