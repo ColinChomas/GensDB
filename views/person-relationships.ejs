@@ -18,6 +18,67 @@
       font-size: 0.85em;
       margin-left: 10px;
     }
+    .view-connection-btn {
+      display: inline;
+      margin-left: 8px;
+      padding: 0;
+      background: none;
+      color: #007bff;
+      border: none;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 1em;
+      text-decoration: none;
+      font-weight: normal;
+    }
+    .view-connection-btn:hover {
+      background: none;
+      text-decoration: underline;
+      color: #0056b3;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.4);
+    }
+    .modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 900px;
+      border-radius: 5px;
+    }
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .close:hover,
+    .close:focus {
+      color: black;
+    }
+    .path-item {
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #f0f0f0;
+      border-left: 3px solid #007bff;
+      border-radius: 3px;
+    }
+    .path-visualization {
+      font-size: 0.95em;
+      margin: 10px 0;
+      overflow-x: auto;
+    }
   </style>
 </head>
 <body>
@@ -65,33 +126,37 @@
         <h3>
           <a href="/people/<%= otherId %>"><%= otherFullName %></a>
           <span class="relation-type"><%= rels[0].relation_type %></span>
+          <button class="view-connection-btn" onclick="openPathModal(<%= person.id %>, <%= otherId %>, '<%= rels[0].relation_string.replace(/'/g, "\\'") %>')">View Connection</button>
         </h3>
 
         <% if (rels.length === 1) { %>
-          <p><strong><%= rels[0].relation_string %></strong></p>
+          <p><strong><%= rels[0].relation_string %></strong> <a href="#" class="view-connection-btn" onclick="openPathModal(<%= person.id %>, <%= otherId %>, '<%= rels[0].relation_string.replace(/'/g, "\\'") %>'); return false;">[view connection]</a></p>
           <p>
             Distance: <%= rels[0].distance %> generation<%= rels[0].distance !== 1 ? 's' : '' %>
-            <% if (rels[0].common_ancestor_id) { %>
+            <% if (rels[0].ancestors && rels[0].ancestors.length > 0) { %>
               <br>
-              Common Ancestor: 
+              Connected through: 
+              <% rels[0].ancestors.forEach((anc, idx) => { %>
+                <% if (idx > 0) { %> or <% } %><%= anc.anc_praenomen %><%= anc.anc_is_bastard ? '' : ' ' + genderifyNomen(anc.anc_nomen, anc.anc_sex) %><%= anc.anc_cognomen ? ' ' + anc.anc_cognomen : '' %>
+              <% }); %>
+            <% } else if (rels[0].anc_praenomen) { %>
+              <br>
+              Connected through: 
               <%= rels[0].anc_praenomen %><%= rels[0].anc_is_bastard ? '' : ' ' + genderifyNomen(rels[0].anc_nomen, rels[0].anc_sex) %><%= rels[0].anc_cognomen ? ' ' + rels[0].anc_cognomen : '' %>
             <% } %>
           </p>
         <% } else { %>
-          <p><strong>Primary:</strong> <%= rels[0].relation_string %></p>
+          <p><strong>Primary:</strong> <%= rels[0].relation_string %> <a href="#" class="view-connection-btn" onclick="openPathModal(<%= person.id %>, <%= otherId %>, '<%= rels[0].relation_string.replace(/'/g, "\\'") %>'); return false;">[view connection]</a></p>
           <details>
             <summary>View all <%= rels.length %> relationship paths</summary>
             <ul>
               <% rels.forEach(rel => { %>
                 <li>
-                  <%= rel.relation_string %>
+                  <%= rel.relation_string %> <a href="#" class="view-connection-btn" onclick="openPathModal(<%= person.id %>, <%= otherId %>, '<%= rel.relation_string.replace(/'/g, "\\'") %>'); return false;">[view connection]</a>
                   <br>
                   <small>
                     Distance: <%= rel.distance %> | 
-                    Type: <%= rel.relation_type %>
-                    <% if (rel.common_ancestor_id) { %>
-                      | via <%= rel.anc_praenomen %><%= rel.anc_is_bastard ? '' : ' ' + genderifyNomen(rel.anc_nomen, rel.anc_sex) %><%= rel.anc_cognomen ? ' ' + rel.anc_cognomen : '' %>
-                    <% } %>
+                    Type: <%= rel.relation_type %><% if (rel.ancestors && rel.ancestors.length > 0) { %> | Connected through: <% rel.ancestors.forEach((anc, idx) => { %><% if (idx > 0) { %> or <% } %><%= anc.anc_praenomen %><%= anc.anc_is_bastard ? '' : ' ' + genderifyNomen(anc.anc_nomen, anc.anc_sex) %><%= anc.anc_cognomen ? ' ' + anc.anc_cognomen : '' %><% }); %><% } %>
                   </small>
                 </li>
               <% }) %>
@@ -103,4 +168,80 @@
   <% } %>
 
 </body>
+
+<div id="pathModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closePathModal()">&times;</span>
+    <h2 id="pathTitle">Connection Path</h2>
+    <div id="pathContent"></div>
+  </div>
+</div>
+
+<script>
+function openPathModal(person1Id, person2Id, relationString) {
+  const modal = document.getElementById('pathModal');
+  const pathContent = document.getElementById('pathContent');
+  
+  pathContent.innerHTML = '<p>Loading...</p>';
+  modal.style.display = 'block';
+  
+  fetch(`/api/relationship-paths/${person1Id}/${person2Id}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        pathContent.innerHTML = '<p>Error: ' + data.error + '</p>';
+        return;
+      }
+      
+      const person1Name = document.querySelector('h1').textContent.split('All Relationships for ')[1];
+      const person2Name = data.person2.name;
+      
+      document.getElementById('pathTitle').textContent = `Connection Path: ${person1Name} ↔ ${person2Name}`;
+      
+      // Filter paths by relation string if provided
+      let filteredPaths = data.paths;
+      if (relationString) {
+        filteredPaths = data.paths.filter(p => p.relationString === relationString);
+      }
+      
+      if (filteredPaths.length === 0) {
+        pathContent.innerHTML = '<p>No paths found for this connection type.</p>';
+        return;
+      }
+      
+      let html = `<p>Found ${filteredPaths.length} connection path${filteredPaths.length !== 1 ? 's' : ''} for: <strong>${relationString || 'all types'}</strong></p>`;
+      
+      filteredPaths.forEach((pathObj, idx) => {
+        const pathViz = pathObj.details.map(p => p.praenomen || p.name).join(' → ');
+        html += `
+          <div class="path-item">
+            <strong>Path ${idx + 1}:</strong> ${pathObj.relationString}
+            <div style="margin-top: 5px; padding-left: 20px; font-family: monospace;">
+              ${pathViz}
+            </div>
+          </div>
+        `;
+      });
+      
+      pathContent.innerHTML = html;
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      pathContent.innerHTML = '<p>Error loading connection path.</p>';
+    });
+}
+
+function closePathModal() {
+  const modal = document.getElementById('pathModal');
+  modal.style.display = 'none';
+}
+
+window.onclick = function(event) {
+  const modal = document.getElementById('pathModal');
+  if (event.target === modal) {
+    modal.style.display = 'none';
+  }
+}
+</script>
+
 </html>

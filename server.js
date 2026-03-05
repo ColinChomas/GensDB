@@ -9,8 +9,9 @@ const { addParentChild } = require('./relationshipService');
 const { genderifyNomen } = require('./romanNaming');
 const { 
   findRelationshipByIds, 
-  getStoredRelations, 
-  computeAllRelationships 
+  computeAllRelationships,
+  loadPeopleGraph,
+  findPathsByIds
 } = require('./relationCheckerService');
 
 
@@ -382,53 +383,152 @@ app.get('/people/:id/relationships', async (req, res) => {
   const house = await getHouseById(person.house_id);
   const nomen = genderifyNomen(person.nomen, person.sex);
   
-  // Get all stored relationships for this person
-  const [relations] = await db.execute(
-    `SELECT pr.*, 
-            p1.praenomen as p1_praenomen, p1.nomen as p1_nomen, p1.cognomen as p1_cognomen, p1.sex as p1_sex, p1.is_bastard as p1_is_bastard,
-            p2.praenomen as p2_praenomen, p2.nomen as p2_nomen, p2.cognomen as p2_cognomen, p2.sex as p2_sex, p2.is_bastard as p2_is_bastard,
-            ancestor.praenomen as anc_praenomen, ancestor.nomen as anc_nomen, ancestor.cognomen as anc_cognomen, ancestor.sex as anc_sex, ancestor.is_bastard as anc_is_bastard
-     FROM person_relation pr
-     JOIN person p1 ON pr.person1_id = p1.id
-     JOIN person p2 ON pr.person2_id = p2.id
-     LEFT JOIN person ancestor ON pr.common_ancestor_id = ancestor.id
-     WHERE pr.person1_id = ? OR pr.person2_id = ?
-     ORDER BY pr.distance, pr.relation_type`,
-    [personId, personId]
-  );
+  // Compute all relationships for this person on-the-fly
+  const { people } = await loadPeopleGraph();
+  const targetPerson = people.get(personId);
+  
+  if (!targetPerson) {
+    return res.render('person-relationships', {
+      person,
+      house,
+      nomen,
+      relations: [],
+      genderifyNomen
+    });
+  }
+
+  const relations = [];
+  const allPeople = Array.from(people.values());
+  
+  for (const otherPerson of allPeople) {
+    if (otherPerson.id === personId) continue;
+    
+    const { allRelations } = targetPerson.findAllRelations(targetPerson, otherPerson);
+    
+    if (allRelations.length > 0) {
+      for (const rel of allRelations) {
+        // Extract ancestor details if available
+        let ancestorData = {};
+        if (rel.commonAncestor && rel.commonAncestor.id) {
+          const ancestorDb = await getPersonById(rel.commonAncestor.id);
+          if (ancestorDb) {
+            const ancestorNomen = genderifyNomen(ancestorDb.nomen, ancestorDb.sex);
+            ancestorData = {
+              anc_praenomen: ancestorDb.praenomen,
+              anc_nomen: ancestorNomen,
+              anc_cognomen: ancestorDb.cognomen,
+              anc_sex: ancestorDb.sex,
+              anc_is_bastard: ancestorDb.is_bastard,
+              anc_id: ancestorDb.id
+            };
+          }
+        }
+        
+        relations.push({
+          person1_id: personId,
+          person2_id: otherPerson.id,
+          relation_type: rel.type,
+          relation_string: rel.relationString,
+          distance: rel.distance,
+          p1_praenomen: person.praenomen,
+          p1_nomen: nomen,
+          p1_cognomen: person.cognomen,
+          p1_sex: person.sex,
+          p1_is_bastard: person.is_bastard,
+          p2_praenomen: otherPerson.name.split(' ')[0],
+          p2_nomen: otherPerson.name,
+          p2_cognomen: '',
+          p2_sex: otherPerson.gender,
+          ...ancestorData
+        });
+      }
+    }
+  }
+
+  // Deduplicate relationships by (person2_id, relation_type, distance) and collect all ancestors
+  const deduplicatedMap = new Map();
+  for (const rel of relations) {
+    const key = `${rel.person2_id}|${rel.relation_type}|${rel.distance}`;
+    if (!deduplicatedMap.has(key)) {
+      deduplicatedMap.set(key, {
+        ...rel,
+        ancestors: [] // Store array of ancestors
+      });
+    }
+    
+    // Add ancestor to the list if not already present
+    if (rel.anc_id) {
+      const existing = deduplicatedMap.get(key);
+      const ancestorExists = existing.ancestors.some(a => a.anc_id === rel.anc_id);
+      if (!ancestorExists) {
+        existing.ancestors.push({
+          anc_praenomen: rel.anc_praenomen,
+          anc_nomen: rel.anc_nomen,
+          anc_cognomen: rel.anc_cognomen,
+          anc_sex: rel.anc_sex,
+          anc_is_bastard: rel.anc_is_bastard,
+          anc_id: rel.anc_id
+        });
+      }
+    }
+  }
+  
+  const deduplicatedRelations = Array.from(deduplicatedMap.values());
+  deduplicatedRelations.sort((a, b) => a.distance - b.distance);
 
   res.render('person-relationships', {
     person,
     house,
     nomen,
-    relations,
+    relations: deduplicatedRelations,
     genderifyNomen
   });
 });
 
 // Relationship statistics
 app.get('/relationships/stats', async (req, res) => {
-  // Count relationships per person
-  const [stats] = await db.execute(
-    `SELECT 
-       p.id,
-       p.praenomen,
-       p.nomen,
-       p.cognomen,
-       p.sex,
-       p.is_bastard,
-       COUNT(DISTINCT CASE WHEN pr.person1_id = p.id THEN pr.person2_id ELSE pr.person1_id END) as relation_count
-     FROM person p
-     LEFT JOIN person_relation pr ON (pr.person1_id = p.id OR pr.person2_id = p.id)
-     GROUP BY p.id, p.praenomen, p.nomen, p.cognomen, p.sex, p.is_bastard
-     ORDER BY relation_count DESC, p.praenomen`
-  );
-
-  // Total relationship count
-  const [totalResult] = await db.execute(
-    'SELECT COUNT(*) as total FROM person_relation'
-  );
-  const totalRelations = totalResult[0].total;
+  const { people } = await loadPeopleGraph();
+  
+  // Count relationships per person on-the-fly
+  const stats = [];
+  const [allPeople] = await db.execute('SELECT * FROM person ORDER BY praenomen');
+  
+  let totalRelations = 0;
+  
+  for (const person of allPeople) {
+    const personObj = people.get(person.id);
+    if (!personObj) continue;
+    
+    let relationCount = 0;
+    
+    for (const otherPerson of people.values()) {
+      if (otherPerson.id === person.id) continue;
+      
+      const { allRelations } = personObj.findAllRelations(personObj, otherPerson);
+      if (allRelations.length > 0) {
+        relationCount++;
+      }
+    }
+    
+    if (relationCount > 0) {
+      totalRelations += relationCount;
+    }
+    
+    stats.push({
+      id: person.id,
+      praenomen: person.praenomen,
+      nomen: person.nomen,
+      cognomen: person.cognomen,
+      sex: person.sex,
+      is_bastard: person.is_bastard,
+      relation_count: relationCount
+    });
+  }
+  
+  // Divide by 2 since each relationship is counted twice (A->B and B->A)
+  totalRelations = Math.floor(totalRelations / 2);
+  
+  stats.sort((a, b) => b.relation_count - a.relation_count);
 
   res.render('relationship-stats', {
     stats,
@@ -474,17 +574,81 @@ app.post('/relationships/check', async (req, res) => {
   }
 });
 
-// Compute all relationships (may be slow for large databases)
+// Get connection paths between two people
+app.get('/api/relationship-paths/:person1Id/:person2Id', async (req, res) => {
+  try {
+    const person1Id = parseInt(req.params.person1Id);
+    const person2Id = parseInt(req.params.person2Id);
+
+    const person1 = await getPersonById(person1Id);
+    const person2 = await getPersonById(person2Id);
+
+    if (!person1 || !person2) {
+      return res.status(404).json({ error: 'One or both people not found' });
+    }
+
+    const paths = await findPathsByIds(person1Id, person2Id);
+    const { allRelations } = await findRelationshipByIds(person1Id, person2Id);
+
+    // Convert paths to format suitable for display
+    const formattedPaths = await Promise.all(paths.map(async (path, pathIdx) => {
+      const pathDetails = await Promise.all(path.map(async (person) => {
+        const dbPerson = await getPersonById(person.id);
+        if (!dbPerson) {
+          return { name: person.name, id: person.id };
+        }
+        const nomen = genderifyNomen(dbPerson.nomen, dbPerson.sex);
+        return {
+          id: person.id,
+          praenomen: dbPerson.praenomen,
+          nomen: nomen,
+          cognomen: dbPerson.cognomen,
+          name: person.name
+        };
+      }));
+
+      // Find matching relation for this path based on distance
+      const pathDistance = path.length - 1; // number of steps in path
+      let matchedRelation = allRelations.find(r => r.distance === pathDistance);
+      
+      // If no exact match, find closest distance match
+      if (!matchedRelation && allRelations.length > 0) {
+        matchedRelation = allRelations.reduce((closest, rel) => {
+          const currentDiff = Math.abs(rel.distance - pathDistance);
+          const closestDiff = Math.abs(closest.distance - pathDistance);
+          return currentDiff < closestDiff ? rel : closest;
+        });
+      }
+
+      return {
+        details: pathDetails,
+        relationString: matchedRelation ? matchedRelation.relationString : 'Related',
+        distance: pathDistance
+      };
+    }));
+
+    res.json({
+      person1: { id: person1Id, name: person1.praenomen },
+      person2: { id: person2Id, name: person2.praenomen },
+      paths: formattedPaths,
+      pathCount: formattedPaths.length
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error computing paths' });
+  }
+});
+
+// Compute all relationships (now computed on-the-fly, this is informational only)
 app.post('/relationships/compute-all', async (req, res) => {
   try {
     const count = await computeAllRelationships();
-    res.send(`Successfully computed ${count} relationship pairs.`);
+    res.send(`Relationships computed on-the-fly. Found ${count} total relationship pairs.`);
   } catch (err) {
     console.error(err);
     res.status(500).send('Error computing relationships');
   }
 });
-
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Server running on http://localhost:' + PORT));

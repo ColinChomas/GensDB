@@ -143,7 +143,7 @@ class Person {
                 type: "Siblings",
                 distance: g1 + g2,
                 relationString: `${person1.name} and ${person2.name} are siblings`,
-                commonAncestor: commonAncestor.name
+                commonAncestor: commonAncestor
             };
         }
 
@@ -157,7 +157,7 @@ class Person {
                     type: "Avuncular",
                     distance: g1 + g2,
                     relationString: `${person1.name} is the ${title} of ${person2.name}`,
-                    commonAncestor: commonAncestor.name
+                    commonAncestor: commonAncestor
                 };
             } else if (g2 === 1 && g1 > 1) {
                 // person2 is uncle/aunt of person1
@@ -166,7 +166,7 @@ class Person {
                     type: "Avuncular",
                     distance: g1 + g2,
                     relationString: `${person2.name} is the ${title} of ${person1.name}`,
-                    commonAncestor: commonAncestor.name
+                    commonAncestor: commonAncestor
                 };
             }
         }
@@ -183,7 +183,7 @@ class Person {
                 type: "Cousins",
                 distance: g1 + g2,
                 relationString: `${person1.name} and ${person2.name} are ${base}`,
-                commonAncestor: commonAncestor.name
+                commonAncestor: commonAncestor
             };
         }
 
@@ -230,7 +230,7 @@ class Person {
                     type: "DirectAncestor",
                     distance: g,
                     relationString: `${person2.name} is the ${name} of ${person1.name}`,
-                    commonAncestor: person2.name
+                    commonAncestor: person2
                 });
             }
         }
@@ -242,7 +242,7 @@ class Person {
                     type: "DirectAncestor",
                     distance: g,
                     relationString: `${person1.name} is the ${name} of ${person2.name}`,
-                    commonAncestor: person1.name
+                    commonAncestor: person1
                 });
             }
         }
@@ -278,6 +278,130 @@ class Person {
             closest: allRelations[0],
             allRelations
         };
+    }
+
+    // Find all genealogically sensible paths between two people
+    // This finds paths that go up to a common ancestor, then back down
+    findAllPaths(person1, person2, maxDepth = 20) {
+        const paths = [];
+
+        // Get all ancestors of both people (call as methods on the person objects)
+        const ancestors1 = person1.getAncestorsMap(maxDepth);
+        const ancestors2 = person2.getAncestorsMap(maxDepth);
+
+        // Find all common ancestors
+        const commonAncestors = [];
+        for (const [ancestor, depth1] of ancestors1.entries()) {
+            if (ancestors2.has(ancestor)) {
+                const depth2 = ancestors2.get(ancestor);
+                commonAncestors.push({
+                    person: ancestor,
+                    depth1: depth1,
+                    depth2: depth2,
+                    totalDistance: depth1 + depth2
+                });
+            }
+        }
+
+        // Sort by closest common ancestor first
+        commonAncestors.sort((a, b) => a.totalDistance - b.totalDistance);
+
+        // For each common ancestor, build the path
+        for (const commonAncestor of commonAncestors) {
+            const pathUp = this.getPathToAncestor(person1, commonAncestor.person);
+            const pathDown = this.getPathFromAncestor(commonAncestor.person, person2);
+
+            if (pathUp && pathDown) {
+                // Combine paths (removing duplicate ancestor)
+                const combinedPath = [...pathUp, ...pathDown.slice(1)];
+                paths.push(combinedPath);
+            }
+        }
+
+        // If no paths found through ancestors, person1 might be ancestor of person2 or vice versa
+        if (paths.length === 0) {
+            // Check if person1 is ancestor of person2
+            const pathDown = this.getPathFromAncestor(person1, person2);
+            if (pathDown) {
+                paths.push(pathDown);
+            }
+            // Check if person2 is ancestor of person1
+            else {
+                const pathUp = this.getPathToAncestor(person1, person2);
+                if (pathUp) {
+                    paths.push(pathUp);
+                }
+            }
+        }
+
+        return paths;
+    }
+
+    // Get path from person to one of their ancestors
+    getPathToAncestor(person, ancestor) {
+        const path = [person];
+        let current = person;
+
+        while (current && current !== ancestor) {
+            const parents = current.getParents();
+            // Find which parent is an ancestor of the target
+            let foundParent = null;
+            for (const parent of parents) {
+                if (parent === ancestor) {
+                    foundParent = parent;
+                    break;
+                }
+                const parentAncestors = parent.getAncestorsMap(20);
+                if (parentAncestors.has(ancestor)) {
+                    foundParent = parent;
+                    break;
+                }
+            }
+
+            if (!foundParent) {
+                return null; // ancestor is not in this line
+            }
+            path.push(foundParent);
+            current = foundParent;
+        }
+
+        return current === ancestor ? path : null;
+    }
+
+    // Get path from ancestor down to person (through descendants)
+    getPathFromAncestor(ancestor, person) {
+        const path = [ancestor];
+        let current = ancestor;
+        const visited = new Set();
+
+        while (current && current !== person) {
+            if (visited.has(current.id)) {
+                return null; // Cycle detected
+            }
+            visited.add(current.id);
+
+            // Find which child leads to person
+            let foundChild = null;
+            for (const child of current.children) {
+                if (child === person) {
+                    foundChild = child;
+                    break;
+                }
+                const childDescendants = child.getDescendantsMap(20);
+                if (childDescendants.has(person)) {
+                    foundChild = child;
+                    break;
+                }
+            }
+
+            if (!foundChild) {
+                return null; // person is not in descendants
+            }
+            path.push(foundChild);
+            current = foundChild;
+        }
+
+        return current === person ? path : null;
     }
 
     // backwards‑compatible single‑relation API

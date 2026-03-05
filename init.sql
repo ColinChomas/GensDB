@@ -41,15 +41,3 @@ ADD CONSTRAINT fk_house_founder
     FOREIGN KEY (founder_id) REFERENCES person(id)
     ON DELETE SET NULL;
 
-CREATE TABLE person_relation (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    person1_id INT NOT NULL,
-    person2_id INT NOT NULL,
-    relation_type VARCHAR(50),
-    relation_string VARCHAR(255),
-    common_ancestor_id INT NULL,
-    distance INT NOT NULL,
-    FOREIGN KEY (person1_id) REFERENCES person(id) ON DELETE CASCADE,
-    FOREIGN KEY (person2_id) REFERENCES person(id) ON DELETE CASCADE,
-    FOREIGN KEY (common_ancestor_id) REFERENCES person(id) ON DELETE SET NULL
-);

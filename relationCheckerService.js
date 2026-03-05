@@ -63,64 +63,23 @@ async function findRelationshipByIds(person1Id, person2Id) {
 }
 
 /**
- * Store computed relationships in the database
+ * Find all paths between two people by their IDs
  */
-async function storeRelations(person1Id, person2Id, allRelations) {
+async function findPathsByIds(person1Id, person2Id) {
   const { people } = await loadPeopleGraph();
 
-  // Clear existing relations between these two people
-  await db.execute(
-    `DELETE FROM person_relation 
-     WHERE (person1_id = ? AND person2_id = ?) 
-        OR (person1_id = ? AND person2_id = ?)`,
-    [person1Id, person2Id, person2Id, person1Id]
-  );
+  const p1 = people.get(person1Id);
+  const p2 = people.get(person2Id);
 
-  // Store each relation path
-  for (const rel of allRelations) {
-    // Find common ancestor ID
-    let ancestorId = null;
-    if (rel.commonAncestor) {
-      for (const [id, person] of people) {
-        if (person.name === rel.commonAncestor) {
-          ancestorId = id;
-          break;
-        }
-      }
-    }
-
-    await db.execute(
-      `INSERT INTO person_relation
-       (person1_id, person2_id, relation_type, relation_string, common_ancestor_id, distance)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        person1Id,
-        person2Id,
-        rel.type,
-        rel.relationString,
-        ancestorId,
-        rel.distance
-      ]
-    );
+  if (!p1 || !p2) {
+    throw new Error('One or both people not found');
   }
+
+  return p1.findAllPaths(p1, p2);
 }
 
 /**
- * Get stored relationships from database
- */
-async function getStoredRelations(person1Id, person2Id) {
-  const [rows] = await db.execute(
-    `SELECT * FROM person_relation 
-     WHERE (person1_id = ? AND person2_id = ?) 
-        OR (person1_id = ? AND person2_id = ?)
-     ORDER BY distance, relation_type`,
-    [person1Id, person2Id, person2Id, person1Id]
-  );
-  return rows;
-}
-
-/**
- * Compute and store all relationships for everyone in the database
+ * Compute all relationships (in-memory only, no storage)
  */
 async function computeAllRelationships() {
   const { people } = await loadPeopleGraph();
@@ -140,7 +99,6 @@ async function computeAllRelationships() {
       const { allRelations } = p1.findAllRelations(p1, p2);
 
       if (allRelations.length > 0) {
-        await storeRelations(id1, id2, allRelations);
         count++;
       }
     }
@@ -152,7 +110,6 @@ async function computeAllRelationships() {
 module.exports = {
   loadPeopleGraph,
   findRelationshipByIds,
-  storeRelations,
-  getStoredRelations,
+  findPathsByIds,
   computeAllRelationships
 };
