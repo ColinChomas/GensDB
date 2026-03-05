@@ -11,8 +11,10 @@
   "description": "",
   "dependencies": {
     "body-parser": "^2.2.2",
+    "dotenv": "^16.3.1",
     "ejs": "^4.0.1",
     "express": "^5.2.1",
+    "git-filter-repo": "^0.0.30",
     "mysql2": "^3.16.3"
   }
 }
