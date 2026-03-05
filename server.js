@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const bodyParser = require('body-parser');
+const fileUpload = require('express-fileupload');
 const db = require('./db');
 const { createHouse, getHouseById } = require('./houseService');
 const { createPerson, getPersonById } = require('./personService');
@@ -18,6 +19,7 @@ const {
 const app = express();
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(fileUpload());
 app.use(express.static('public'));
 
 async function getAllHouses() {
@@ -152,6 +154,186 @@ async function buildTreeLimited(person, prefix = '', isLast = true, seen = new S
   }
 
   return output;
+}
+
+// Get all ancestors of a person (up to 3 generations)
+async function getAncestors(personId, maxGenerations = 3, generations = 0) {
+  if (generations >= maxGenerations) {
+    return new Set();
+  }
+
+  const [parents] = await db.execute(
+    `SELECT DISTINCT p.id FROM parent_child pc 
+     JOIN person p ON pc.parent_id = p.id 
+     WHERE pc.child_id = ?`,
+    [personId]
+  );
+
+  let ancestors = new Set();
+  for (const parent of parents) {
+    ancestors.add(parent.id);
+    const grandparents = await getAncestors(parent.id, maxGenerations, generations + 1);
+    grandparents.forEach(gp => ancestors.add(gp));
+  }
+
+  return ancestors;
+}
+
+// Calculate ancestral genetic variation (how inbred their ancestors are)
+async function calculateAncestralInbreeding(personId) {
+  try {
+    // Get all ancestors up to 5 generations back
+    const [allAncestors] = await db.execute(
+      `WITH RECURSIVE ancestor_tree AS (
+        SELECT parent_id as ancestor_id, 1 as generation
+        FROM parent_child
+        WHERE child_id = ?
+        UNION ALL
+        SELECT pc.parent_id, at.generation + 1
+        FROM parent_child pc
+        JOIN ancestor_tree at ON pc.child_id = at.ancestor_id
+        WHERE at.generation < 5
+      )
+      SELECT DISTINCT ancestor_id FROM ancestor_tree`,
+      [personId]
+    );
+
+    if (allAncestors.length === 0) {
+      return { coefficient: 0, percentage: '0%', description: 'No ancestor data available' };
+    }
+
+    // Calculate inbreeding coefficient for each ancestor
+    let totalCoefficient = 0;
+    let ancestorsWithData = 0;
+
+    for (const ancestorRecord of allAncestors) {
+      const ancestorInbreeding = await calculateInbreedingCoefficient(ancestorRecord.ancestor_id);
+      if (ancestorInbreeding.coefficient > 0) {
+        totalCoefficient += ancestorInbreeding.coefficient;
+        ancestorsWithData++;
+      }
+    }
+
+    // Average inbreeding coefficient across all ancestors
+    const averageCoefficient = ancestorsWithData > 0 ? totalCoefficient / ancestorsWithData : 0;
+    const percentage = (averageCoefficient * 100).toFixed(2);
+    
+    let description = 'Pure ancestry';
+    
+    if (averageCoefficient > 0.125) {
+      description = 'Highly inbred ancestry';
+    } else if (averageCoefficient > 0.0625) {
+      description = 'Moderately inbred ancestry';
+    } else if (averageCoefficient > 0.015625) {
+      description = 'Mildly inbred ancestry';
+    } else if (averageCoefficient > 0) {
+      description = 'Some inbreeding in ancestry';
+    }
+
+    return { coefficient: averageCoefficient, percentage, description, ancestorsAnalyzed: allAncestors.length };
+  } catch (error) {
+    console.error('Error calculating ancestral inbreeding:', error);
+    return { coefficient: 0, percentage: '0%', description: 'Error calculating' };
+  }
+}
+
+// Calculate inbreeding coefficient based on common ancestors
+async function calculateInbreedingCoefficient(personId) {
+  try {
+    // Get both parents
+    const [parents] = await db.execute(
+      `SELECT DISTINCT p.*, pc.status FROM parent_child pc 
+       JOIN person p ON pc.parent_id = p.id 
+       WHERE pc.child_id = ?`,
+      [personId]
+    );
+
+    if (parents.length < 2) {
+      return { coefficient: 0, percentage: '0%', description: 'No inbreeding detected' };
+    }
+
+    // Get father and mother
+    const father = parents.find(p => p.sex === 1);
+    const mother = parents.find(p => p.sex === 0);
+
+    if (!father || !mother) {
+      return { coefficient: 0, percentage: '0%', description: 'Insufficient parent data' };
+    }
+
+    // Get all ancestors for each parent
+    const fatherAncestors = await getAncestors(father.id, 3);
+    const motherAncestors = await getAncestors(mother.id, 3);
+
+    // Find common ancestors
+    const commonAncestors = new Set([...fatherAncestors].filter(x => motherAncestors.has(x)));
+
+    if (commonAncestors.size === 0) {
+      return { coefficient: 0, percentage: '0%', description: 'Unrelated parents' };
+    }
+
+    // Simple coefficient: count of common ancestors as percentage
+    // Each common ancestor increases coefficient
+    // This is a simplified measure
+    let coefficient = 0;
+    for (const ancestorId of commonAncestors) {
+      // Get distance from father to ancestor
+      const fatherDist = await getDistance(father.id, ancestorId);
+      // Get distance from mother to ancestor
+      const motherDist = await getDistance(mother.id, ancestorId);
+
+      if (fatherDist !== null && motherDist !== null) {
+        // Contribution = (1/2)^(d1 + d2 + 1)
+        coefficient += Math.pow(0.5, fatherDist + motherDist + 1);
+      }
+    }
+
+    const percentage = (coefficient * 100).toFixed(2);
+    let description = 'Unrelated';
+    
+    if (coefficient > 0.125) {
+      description = 'Highly inbred';
+    } else if (coefficient > 0.0625) {
+      description = 'Moderately inbred';
+    } else if (coefficient > 0.015625) {
+      description = 'Mildly inbred';
+    } else if (coefficient > 0) {
+      description = 'Distantly related';
+    }
+
+    return { coefficient, percentage, description, commonAncestors: commonAncestors.size };
+  } catch (error) {
+    console.error('Error calculating inbreeding:', error);
+    return { coefficient: 0, percentage: '0%', description: 'Error calculating' };
+  }
+}
+
+// Calculate distance between two people in the family tree
+async function getDistance(personId, ancestorId, visited = new Set(), distance = 0) {
+  if (personId === ancestorId) {
+    return distance;
+  }
+
+  if (visited.has(personId) || distance > 5) {
+    return null;
+  }
+
+  visited.add(personId);
+
+  const [parents] = await db.execute(
+    `SELECT p.id FROM parent_child pc 
+     JOIN person p ON pc.parent_id = p.id 
+     WHERE pc.child_id = ?`,
+    [personId]
+  );
+
+  for (const parent of parents) {
+    const result = await getDistance(parent.id, ancestorId, visited, distance + 1);
+    if (result !== null) {
+      return result;
+    }
+  }
+
+  return null;
 }
 
 async function buildTree(person, prefix = '', isLast = true, seen = new Set(), depth = 0, treeHouseId = null, parentStatus = 'confirmed') {
@@ -298,6 +480,290 @@ app.post('/houses/create-founder/:id', async (req, res) => {
 
   res.redirect('/houses');
 });
+
+// Export house members as CSV
+app.get('/houses/:id/export-csv', async (req, res) => {
+  try {
+    const houseId = req.params.id;
+    const house = await getHouseById(houseId);
+    
+    if (!house) {
+      return res.status(404).send('House not found');
+    }
+
+    // Get all people in this house
+    const [people] = await db.execute(
+      `SELECT * FROM person WHERE house_id = ? ORDER BY praenomen`,
+      [houseId]
+    );
+
+    // Get parent-child relationships for people in this house
+    const [relationships] = await db.execute(
+      `SELECT pc.parent_id, pc.child_id, p1.praenomen as parent_praenomen, p1.nomen as parent_nomen, p2.praenomen as child_praenomen, p2.nomen as child_nomen
+       FROM parent_child pc
+       JOIN person p1 ON pc.parent_id = p1.id
+       JOIN person p2 ON pc.child_id = p2.id
+       WHERE (p1.house_id = ? OR p2.house_id = ?)`,
+      [houseId, houseId]
+    );
+
+    // Build CSV content with parent references
+    let csv = 'praenomen,nomen,cognomen,sex,is_bastard,birth_year,death_year,father_praenomen,father_nomen,mother_praenomen,mother_nomen\n';
+    
+    for (const person of people) {
+      // Find parents for this person
+      const personRelationships = relationships.filter(r => 
+        r.child_praenomen === person.praenomen && r.child_nomen === person.nomen
+      );
+      
+      let father = null;
+      let mother = null;
+      
+      for (const rel of personRelationships) {
+        // Get parent gender to determine if father or mother
+        const [parentData] = await db.execute(
+          `SELECT sex FROM person WHERE praenomen = ? AND nomen = ?`,
+          [rel.parent_praenomen, rel.parent_nomen]
+        );
+        
+        if (parentData.length > 0) {
+          if (parentData[0].sex === 1) {
+            father = { praenomen: rel.parent_praenomen, nomen: rel.parent_nomen };
+          } else {
+            mother = { praenomen: rel.parent_praenomen, nomen: rel.parent_nomen };
+          }
+        }
+      }
+      
+      const praenomen = escapeCSV(person.praenomen);
+      const nomen = escapeCSV(person.nomen);
+      const cognomen = escapeCSV(person.cognomen || '');
+      const sex = person.sex;
+      const isBastard = person.is_bastard;
+      const birthYear = person.birth_year || '';
+      const deathYear = person.death_year || '';
+      const fatherPraenomen = father ? escapeCSV(father.praenomen) : '';
+      const fatherNomen = father ? escapeCSV(father.nomen) : '';
+      const motherPraenomen = mother ? escapeCSV(mother.praenomen) : '';
+      const motherNomen = mother ? escapeCSV(mother.nomen) : '';
+      
+      csv += `${praenomen},${nomen},${cognomen},${sex},${isBastard},${birthYear},${deathYear},${fatherPraenomen},${fatherNomen},${motherPraenomen},${motherNomen}\n`;
+    }
+
+    // Send as download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${house.gens_name}_export.csv"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).send('Error exporting CSV');
+  }
+});
+
+// Import house members from CSV
+app.post('/houses/:id/import-csv', async (req, res) => {
+  try {
+    const houseId = parseInt(req.params.id);
+    const house = await getHouseById(houseId);
+    
+    if (!house) {
+      return res.status(404).send('House not found');
+    }
+
+    // Check if file was uploaded
+    if (!req.files || !req.files['csv-file']) {
+      const people = await getAllPeople();
+      return res.render('edit-house', {
+        house,
+        people,
+        message: { type: 'error', text: 'No file uploaded' },
+        genderifyNomen
+      });
+    }
+
+    const file = req.files['csv-file'];
+    const csvData = file.data.toString('utf-8');
+    const lines = csvData.split('\n').map(line => line.trim()).filter(line => line);
+
+    if (lines.length < 2) {
+      const people = await getAllPeople();
+      return res.render('edit-house', {
+        house,
+        people,
+        message: { type: 'error', text: 'CSV file must have a header and at least one data row' },
+        genderifyNomen
+      });
+    }
+
+    // Parse header
+    const headers = lines[0].split(',').map(h => h.trim());
+    const requiredHeaders = ['praenomen', 'nomen', 'sex'];
+    
+    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+    if (missingHeaders.length > 0) {
+      const people = await getAllPeople();
+      return res.render('edit-house', {
+        house,
+        people,
+        message: { 
+          type: 'error', 
+          text: 'Invalid CSV format',
+          details: `Missing required columns: ${missingHeaders.join(', ')}`
+        },
+        genderifyNomen
+      });
+    }
+
+    // Create header index map
+    const headerIndices = {};
+    headers.forEach((header, i) => {
+      headerIndices[header] = i;
+    });
+
+    let importedCount = 0;
+    let errors = [];
+    const importedPeopleMap = new Map(); // Track imported people for relationships
+
+    // Process each data row
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const line = lines[i];
+        if (!line.trim()) continue;
+
+        const values = parseCSVLine(line);
+
+        // Extract values
+        const praenomen = values[headerIndices['praenomen']]?.trim();
+        const nomen = values[headerIndices['nomen']]?.trim();
+        const cognomen = values[headerIndices['cognomen']]?.trim() || null;
+        const sex = parseInt(values[headerIndices['sex']]) || 0;
+        const isBastard = parseInt(values[headerIndices['is_bastard']]) || 0;
+        const birthYear = values[headerIndices['birth_year']]?.trim() ? parseInt(values[headerIndices['birth_year']]) : null;
+        const deathYear = values[headerIndices['death_year']]?.trim() ? parseInt(values[headerIndices['death_year']]) : null;
+        const fatherPraenomen = values[headerIndices['father_praenomen']]?.trim() || null;
+        const fatherNomen = values[headerIndices['father_nomen']]?.trim() || null;
+        const motherPraenomen = values[headerIndices['mother_praenomen']]?.trim() || null;
+        const motherNomen = values[headerIndices['mother_nomen']]?.trim() || null;
+
+        // Validate required fields
+        if (!praenomen || !nomen) {
+          errors.push(`Row ${i + 1}: Missing praenomen or nomen`);
+          continue;
+        }
+
+        // Insert person
+        const [insertResult] = await db.execute(
+          `INSERT INTO person (praenomen, nomen, cognomen, house_id, sex, is_bastard, birth_year, death_year)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [praenomen, nomen, cognomen, houseId, sex, isBastard, birthYear, deathYear]
+        );
+
+        const newPersonId = insertResult.insertId;
+        importedPeopleMap.set(`${praenomen}|${nomen}`, newPersonId);
+
+        // Handle parent relationships
+        if (fatherPraenomen && fatherNomen) {
+          // Find father by praenomen and nomen (search all houses)
+          const [fatherData] = await db.execute(
+            `SELECT id FROM person WHERE praenomen = ? AND nomen = ?`,
+            [fatherPraenomen, fatherNomen]
+          );
+          
+          if (fatherData.length > 0) {
+            await addParentChild(fatherData[0].id, newPersonId, 'biological', 'confirmed');
+          } else {
+            errors.push(`Row ${i + 1}: Father not found (${fatherPraenomen} ${fatherNomen})`);
+          }
+        }
+
+        if (motherPraenomen && motherNomen) {
+          // Find mother by praenomen and nomen (search all houses)
+          const [motherData] = await db.execute(
+            `SELECT id FROM person WHERE praenomen = ? AND nomen = ?`,
+            [motherPraenomen, motherNomen]
+          );
+          
+          if (motherData.length > 0) {
+            await addParentChild(motherData[0].id, newPersonId, 'biological', 'confirmed');
+          } else {
+            errors.push(`Row ${i + 1}: Mother not found (${motherPraenomen} ${motherNomen})`);
+          }
+        }
+
+        importedCount++;
+      } catch (rowError) {
+        errors.push(`Row ${i + 1}: ${rowError.message}`);
+      }
+    }
+
+    // Reload people for the form
+    const people = await getAllPeople();
+    
+    let details = `Imported ${importedCount} member${importedCount !== 1 ? 's' : ''}`;
+    if (errors.length > 0) {
+      details += `. ${errors.length} error${errors.length !== 1 ? 's' : ''}: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}`;
+    }
+
+    res.render('edit-house', {
+      house,
+      people,
+      message: { 
+        type: importedCount > 0 ? 'success' : 'error',
+        text: importedCount > 0 ? 'Import completed!' : 'No members imported',
+        details: details
+      },
+      genderifyNomen
+    });
+  } catch (error) {
+    console.error('CSV import error:', error);
+    const people = await getAllPeople();
+    res.render('edit-house', {
+      house: await getHouseById(req.params.id),
+      people,
+      message: { type: 'error', text: 'Import failed', details: error.message },
+      genderifyNomen
+    });
+  }
+});
+
+// Helper function to escape values for CSV
+function escapeCSV(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+// Helper function to parse CSV line (handles quoted fields)
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current);
+  return result;
+}
 
 app.get('/people', async (req, res) => {
   let people = await getAllPeople();
@@ -464,6 +930,12 @@ app.get('/people/:id', async (req, res) => {
     [person.id]
   );
 
+  // Calculate inbreeding coefficient
+  const inbreedingData = await calculateInbreedingCoefficient(person.id);
+
+  // Calculate ancestral genetic variation
+  const ancestralInbreedingData = await calculateAncestralInbreeding(person.id);
+
   res.render('person', {
     person,
     house,
@@ -479,6 +951,8 @@ app.get('/people/:id', async (req, res) => {
     rumoredPartners: rumoredPartnersData,
     grandparents,
     grandchildren,
+    inbreedingData,
+    ancestralInbreedingData,
     genderifyNomen,
     formatRomanDate
   });
