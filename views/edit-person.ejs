@@ -8,9 +8,14 @@
     .select2-container--default .select2-selection--single {
       border: 1px solid #ccc;
       padding: 3px;
+      display: flex;
+      align-items: center;
     }
     .select2-container--default .select2-selection--single .select2-selection__rendered {
       padding: 2px;
+      display: flex;
+      align-items: center;
+      min-height: 30px;
     }
   </style>
 </head>
@@ -88,7 +93,6 @@
   <script>
     $(document).ready(function() {
       $('.searchable-select').select2({
-        allowClear: true,
         placeholder: 'Search...'
       });
     });
