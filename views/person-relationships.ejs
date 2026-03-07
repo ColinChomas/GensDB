@@ -7,23 +7,25 @@
     .relation-item {
       margin-bottom: 15px;
       padding: 10px;
-      background: #f9f9f9;
-      border-left: 3px solid #333;
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--text-secondary);
+      border-radius: 3px;
     }
     .relation-type {
       display: inline-block;
       padding: 2px 8px;
-      background: #ddd;
+      background: var(--bg-tertiary);
       border-radius: 3px;
       font-size: 0.85em;
       margin-left: 10px;
+      color: var(--text-primary);
     }
     .view-connection-btn {
       display: inline;
       margin-left: 8px;
       padding: 0;
       background: none;
-      color: #007bff;
+      color: var(--text-secondary);
       border: none;
       border-radius: 0;
       cursor: pointer;
@@ -34,7 +36,7 @@
     .view-connection-btn:hover {
       background: none;
       text-decoration: underline;
-      color: #0056b3;
+      color: var(--text-secondary);
     }
     .modal {
       display: none;
@@ -48,16 +50,17 @@
       background-color: rgba(0, 0, 0, 0.4);
     }
     .modal-content {
-      background-color: #fefefe;
+      background-color: var(--bg-primary);
       margin: 5% auto;
       padding: 20px;
-      border: 1px solid #888;
+      border: 1px solid var(--border-color);
       width: 80%;
       max-width: 900px;
       border-radius: 5px;
+      color: var(--text-primary);
     }
     .close {
-      color: #aaa;
+      color: var(--text-secondary);
       float: right;
       font-size: 28px;
       font-weight: bold;
@@ -65,25 +68,28 @@
     }
     .close:hover,
     .close:focus {
-      color: black;
+      color: var(--text-primary);
     }
     .path-item {
       margin-bottom: 15px;
       padding: 10px;
-      background: #f0f0f0;
-      border-left: 3px solid #007bff;
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--text-secondary);
       border-radius: 3px;
     }
     .path-visualization {
       font-size: 0.95em;
       margin: 10px 0;
       overflow-x: auto;
+      color: var(--text-primary);
     }
   </style>
 </head>
 <body>
+  <%- include('navbar') %>
 
-  <h1>All Relationships for <%= person.praenomen %><%= nomen ? ' ' + nomen : '' %><% if (person.cognomen) { %> <%= ' ' + person.cognomen %><% } %></h1>
+  <main>
+    <h1>All Relationships for <%= person.praenomen %><%= nomen ? ' ' + nomen : '' %><% if (person.cognomen) { %> <%= ' ' + person.cognomen %><% } %></h1>
 
   <p><strong>House:</strong> <%= house.gens_name %></p>
 
@@ -165,7 +171,7 @@
         <% } %>
       </div>
     <% }) %>
-  <% } %>
+  </main>  <% } %>
 
 </body>
 

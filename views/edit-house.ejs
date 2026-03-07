@@ -16,28 +16,28 @@
 
   <h2>📥 Export House Data</h2>
   <p>Download all members of this house as a CSV file to share with others.</p>
-  <a href="/houses/<%= house.id %>/export-csv" style="display: inline-block; padding: 10px 20px; background: #6b5038; color: #fefcf8; text-decoration: none; border-radius: 4px; margin-bottom: 20px;">
+  <a href="/houses/<%= house.id %>/export-csv" style="display: inline-block; padding: 10px 20px; background: var(--button-bg); color: white; text-decoration: none; border-radius: 4px; margin-bottom: 20px;">
     Download CSV
   </a>
 
   <h2>📤 Import House Data</h2>
   <p>Upload a CSV file to add members to this house and their family relationships. The CSV should have the format:</p>
-  <div style="background: #f5ede2; padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace; font-size: 12px; overflow-x: auto;">
+  <div style="background: var(--bg-secondary); padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace; font-size: 12px; overflow-x: auto; border: 1px solid var(--border-color);">
     praenomen,nomen,cognomen,sex,is_bastard,birth_year,death_year,father_praenomen,father_nomen,mother_praenomen,mother_nomen
   </div>
-  <p style="font-size: 13px; color: #3a2415;"><strong>Note:</strong> Parent names should match existing people in the database (from any house). Leave father/mother fields blank if unknown.</p>
+  <p style="font-size: 13px; color: var(--text-primary);"><strong>Note:</strong> Parent names should match existing people in the database (from any house). Leave father/mother fields blank if unknown.</p>
 
   <form method="POST" action="/houses/<%= house.id %>/import-csv" enctype="multipart/form-data">
     <label for="csv-file"><strong>Select CSV file:</strong></label><br>
     <input type="file" id="csv-file" name="csv-file" accept=".csv" required style="padding: 8px; margin: 8px 0;"><br>
-    <button type="submit" style="padding: 10px 20px; background: #6b5038; color: #fefcf8; border: none; border-radius: 4px; cursor: pointer;">
+    <button type="submit" style="padding: 10px 20px; background: var(--button-bg); color: white; border: none; border-radius: 4px; cursor: pointer;">
       Import Members
     </button>
   </form>
 
   <% if (locals.message) { %>
     <% const isError = message.type === 'error'; %>
-    <div style="background: <%= isError ? '#ffcccc' : '#ccffcc' %>; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 3px solid <%= isError ? '#cc0000' : '#00cc00' %>;">
+    <div style="background: var(--bg-secondary); padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 3px solid var(--text-secondary);">
       <strong><%= isError ? 'Error' : 'Success' %>:</strong> <%= message.text %>
       <% if (message.details) { %>
         <br><small><%= message.details %></small>

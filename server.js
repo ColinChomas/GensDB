@@ -424,17 +424,19 @@ async function buildTree(person, prefix = '', isLast = true, seen = new Set(), d
 
 app.get('/', async (req, res) => {
   const houses = await getAllHouses();
+  const people = await getAllPeople();
   
-  // Get founder details for each house
-  const housesWithFounders = await Promise.all(houses.map(async (house) => {
+  // Count members per house and get founder details
+  const housesWithDetails = await Promise.all(houses.map(async (house) => {
+    const memberCount = people.filter(p => p.house_id === house.id).length;
+    let founder = null;
     if (house.founder_id) {
-      const founder = await getPersonById(house.founder_id);
-      return { ...house, founder };
+      founder = await getPersonById(house.founder_id);
     }
-    return { ...house, founder: null };
+    return { ...house, founder, memberCount };
   }));
   
-  res.render('index', { houses: housesWithFounders, genderifyNomen });
+  res.render('index', { houses: housesWithDetails, genderifyNomen });
 });
 
 app.get('/houses', async (req, res) => {

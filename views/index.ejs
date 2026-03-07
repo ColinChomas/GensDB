@@ -146,6 +146,11 @@
               <% } else { %>
                 <p><span class="founder-label">Founder:</span> <em>Not set</em></p>
               <% } %>
+              
+              <p>
+                <span class="founder-label">Members:</span>
+                <%= h.memberCount || 0 %> <%= (h.memberCount === 1 ? 'person' : 'people') %>
+              </p>
             </div>
 
             <div class="house-card-actions">

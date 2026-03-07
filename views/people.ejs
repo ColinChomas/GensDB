@@ -7,11 +7,14 @@
     .filter-section {
       margin-bottom: 20px;
       padding: 15px;
-      background: #f5f5f5;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
       border-radius: 5px;
+      color: var(--text-primary);
     }
     .filter-section h3 {
       margin-top: 0;
+      color: var(--text-primary);
     }
     .filter-group {
       display: inline-block;
@@ -21,23 +24,26 @@
     .filter-group label {
       margin-right: 8px;
       font-weight: bold;
+      color: var(--text-primary);
     }
     .filter-group input,
     .filter-group select {
       padding: 5px 8px;
-      border: 1px solid #ccc;
+      border: 1px solid var(--border-color);
       border-radius: 3px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
     }
     button.reset-filters {
       padding: 5px 15px;
-      background: #666;
+      background: var(--button-bg);
       color: white;
       border: none;
       border-radius: 3px;
       cursor: pointer;
     }
     button.reset-filters:hover {
-      background: #444;
+      background: var(--button-hover);
     }
   </style>
 </head>

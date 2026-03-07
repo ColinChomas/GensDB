@@ -5,8 +5,11 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Gens <%= house.gens_name %></h1>
-  <div class="tree"><%- tree %></div>
-  <a href="/">Back</a>
+  <%- include('navbar') %>
+  <main>
+    <h1>Gens <%= house.gens_name %></h1>
+    <div class="tree"><%- tree %></div>
+    <a href="/">Back</a>
+  </main>
 </body>
 </html>

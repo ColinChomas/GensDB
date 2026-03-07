@@ -13,31 +13,34 @@
     th, td {
       padding: 10px;
       text-align: left;
-      border-bottom: 1px solid #ddd;
+      border-bottom: 1px solid var(--border-color);
     }
     th {
-      background-color: #333;
-      color: white;
+      background-color: var(--bg-tertiary);
+      color: var(--text-primary);
     }
     tr:hover {
-      background-color: #f5f5f5;
+      background-color: var(--bg-secondary);
     }
     .rank {
       font-weight: bold;
-      color: #666;
+      color: var(--text-secondary);
     }
     .stat-box {
-      background: #f9f9f9;
+      background: var(--bg-secondary);
       padding: 15px;
       margin: 20px 0;
       border-radius: 5px;
       max-width: 800px;
+      border: 1px solid var(--border-color);
     }
   </style>
 </head>
 <body>
+  <%- include('navbar') %>
 
-  <h1>Relationship Statistics</h1>
+  <main>
+    <h1>Relationship Statistics</h1>
 
   <a href="/">← Back Home</a> | 
   <a href="/relationships/check">Check Relationships</a>
@@ -90,8 +93,7 @@
   <h3>Update Relationships</h3>
   <form method="POST" action="/relationships/compute-all" onsubmit="return confirm('This may take a while for large databases. Continue?');">
     <button type="submit">Recompute All Relationships</button>
-    <br><small>This will recalculate and update all relationship paths in the database.</small>
-  </form>
+    <br><  </main>  </form>
 
 </body>
 </html>
