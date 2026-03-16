@@ -10,9 +10,15 @@
   <main>
     <h1>Add a New Gens (House)</h1>
 
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div style="color: #d32f2f; padding: 10px; margin-bottom: 15px; border: 1px solid #d32f2f; background-color: #ffcdd2; border-radius: 4px;">
+        <strong>Error:</strong> <%= error %>
+      </div>
+    <% } %>
+
     <form method="POST" action="/houses/add">
       <label>Gens Name:</label><br>
-      <input type="text" name="gens_name" required><br><br>
+      <input type="text" name="gens_name" maxlength="150" required><br><br>
 
       <button type="submit">Create House</button>
     </form>

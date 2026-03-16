@@ -42,10 +42,16 @@
   <main>
     <h1>Add a Person</h1>
 
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div style="color: #d32f2f; padding: 10px; margin-bottom: 15px; border: 1px solid #d32f2f; background-color: #ffcdd2; border-radius: 4px;">
+        <strong>Error:</strong> <%= error %>
+      </div>
+    <% } %>
+
     <form method="POST" action="/people/add">
 
     <label>Praenomen:</label><br>
-    <input type="text" name="praenomen" required><br><br>
+    <input type="text" name="praenomen" maxlength="100" required><br><br>
 
     <label>House (Gens):</label><br>
     <select name="house_id" class="searchable-select" required>
@@ -61,7 +67,7 @@
     </select><br><br>
 
     <label>Cognomen (optional):</label><br>
-    <input type="text" name="cognomen"><br><br>
+    <input type="text" name="cognomen" maxlength="100"><br><br>
 
     <label>Birth Year (e.g., 100 for 100 BC):</label><br>
     <input type="number" name="birth_year"><br><br>

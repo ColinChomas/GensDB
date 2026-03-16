@@ -42,10 +42,16 @@
   <main>
     <h1>Edit Person</h1>
 
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div style="color: #d32f2f; padding: 10px; margin-bottom: 15px; border: 1px solid #d32f2f; background-color: #ffcdd2; border-radius: 4px;">
+        <strong>Error:</strong> <%= error %>
+      </div>
+    <% } %>
+
   <form method="POST" action="/people/edit/<%= person.id %>">
 
     <label>Praenomen:</label><br>
-    <input type="text" name="praenomen" value="<%= person.praenomen %>" required><br><br>
+    <input type="text" name="praenomen" value="<%= person.praenomen %>" maxlength="100" required><br><br>
 
     <label>House:</label><br>
     <select name="house_id" class="searchable-select">
@@ -63,7 +69,7 @@
     </select><br><br>
 
     <label>Cognomen:</label><br>
-    <input type="text" name="cognomen" value="<%= person.cognomen || '' %>"><br><br>
+    <input type="text" name="cognomen" value="<%= person.cognomen || '' %>" maxlength="100"><br><br>
 
     <label>Birth Year:</label><br>
     <input type="number" name="birth_year" value="<%= person.birth_year || '' %>"><br><br>

@@ -1,7 +1,17 @@
 const db = require('./db');
 const { getHouseById } = require('./houseService');
+const { validateString, validateOptionalString, validateYear, validateSex, validateId, validateBoolean } = require('./validators');
 
 async function createPerson({ houseId, sex, praenomen, cognomen = null, isBastard = false, birthYear = null, deathYear = null, adoptiveHouseId = null }) {
+  // Validate inputs
+  houseId = validateId(houseId, 'House ID');
+  sex = validateSex(sex);
+  praenomen = validateString(praenomen, 100, 'Praenomen');
+  cognomen = validateOptionalString(cognomen, 100, 'Cognomen');
+  birthYear = validateYear(birthYear, 'Birth Year');
+  deathYear = validateYear(deathYear, 'Death Year');
+  if (adoptiveHouseId) adoptiveHouseId = validateId(adoptiveHouseId, 'Adoptive House ID');
+
   const house = await getHouseById(houseId);
   if (!house) throw new Error('House not found');
 
