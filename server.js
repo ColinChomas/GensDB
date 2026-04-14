@@ -536,15 +536,15 @@ app.get('/houses/:id/export-csv', async (req, res) => {
       return res.status(404).send('House not found');
     }
 
-    // Get all people in this house
+    // Get all people in this house with their IDs
     const [people] = await db.execute(
-      `SELECT * FROM person WHERE house_id = ? ORDER BY praenomen`,
+      `SELECT id, praenomen, nomen, cognomen, sex, is_bastard, birth_year, death_year FROM person WHERE house_id = ? ORDER BY praenomen`,
       [houseId]
     );
 
     // Get parent-child relationships for people in this house
     const [relationships] = await db.execute(
-      `SELECT pc.parent_id, pc.child_id, p1.praenomen as parent_praenomen, p1.nomen as parent_nomen, p2.praenomen as child_praenomen, p2.nomen as child_nomen
+      `SELECT pc.parent_id, pc.child_id
        FROM parent_child pc
        JOIN person p1 ON pc.parent_id = p1.id
        JOIN person p2 ON pc.child_id = p2.id
@@ -552,30 +552,28 @@ app.get('/houses/:id/export-csv', async (req, res) => {
       [houseId, houseId]
     );
 
-    // Build CSV content with parent references
-    let csv = 'praenomen,nomen,cognomen,sex,is_bastard,birth_year,death_year,father_praenomen,father_nomen,mother_praenomen,mother_nomen\n';
+    // Build CSV content with temp_id and parent ID references
+    let csv = 'temp_id,praenomen,nomen,cognomen,sex,is_bastard,birth_year,death_year,father_temp_id,mother_temp_id\n';
     
     for (const person of people) {
-      // Find parents for this person
-      const personRelationships = relationships.filter(r => 
-        r.child_praenomen === person.praenomen && r.child_nomen === person.nomen
-      );
+      // Find parents for this person using their ID (not name)
+      const personRelationships = relationships.filter(r => r.child_id === person.id);
       
-      let father = null;
-      let mother = null;
+      let fatherId = '';
+      let motherId = '';
       
       for (const rel of personRelationships) {
-        // Get parent gender to determine if father or mother
+        // Get parent to determine gender
         const [parentData] = await db.execute(
-          `SELECT sex FROM person WHERE praenomen = ? AND nomen = ?`,
-          [rel.parent_praenomen, rel.parent_nomen]
+          `SELECT id, sex FROM person WHERE id = ?`,
+          [rel.parent_id]
         );
         
         if (parentData.length > 0) {
           if (parentData[0].sex === 1) {
-            father = { praenomen: rel.parent_praenomen, nomen: rel.parent_nomen };
+            fatherId = parentData[0].id;
           } else {
-            mother = { praenomen: rel.parent_praenomen, nomen: rel.parent_nomen };
+            motherId = parentData[0].id;
           }
         }
       }
@@ -587,12 +585,8 @@ app.get('/houses/:id/export-csv', async (req, res) => {
       const isBastard = person.is_bastard;
       const birthYear = person.birth_year || '';
       const deathYear = person.death_year || '';
-      const fatherPraenomen = father ? escapeCSV(father.praenomen) : '';
-      const fatherNomen = father ? escapeCSV(father.nomen) : '';
-      const motherPraenomen = mother ? escapeCSV(mother.praenomen) : '';
-      const motherNomen = mother ? escapeCSV(mother.nomen) : '';
       
-      csv += `${praenomen},${nomen},${cognomen},${sex},${isBastard},${birthYear},${deathYear},${fatherPraenomen},${fatherNomen},${motherPraenomen},${motherNomen}\n`;
+      csv += `${person.id},${praenomen},${nomen},${cognomen},${sex},${isBastard},${birthYear},${deathYear},${fatherId},${motherId}\n`;
     }
 
     // Send as download
@@ -667,7 +661,8 @@ app.post('/houses/:id/import-csv', async (req, res) => {
 
     let importedCount = 0;
     let errors = [];
-    const importedPeopleMap = new Map(); // Track imported people for relationships
+    const tempIdMap = new Map(); // Map temp_id from CSV to new person ID
+    const parentIdMap = new Map(); // Map temp_id to parent ID for linking
 
     // Process each data row
     for (let i = 1; i < lines.length; i++) {
@@ -678,6 +673,7 @@ app.post('/houses/:id/import-csv', async (req, res) => {
         const values = parseCSVLine(line);
 
         // Extract values
+        const tempId = values[headerIndices['temp_id']]?.trim() || null;
         const praenomen = values[headerIndices['praenomen']]?.trim();
         const nomen = values[headerIndices['nomen']]?.trim();
         const cognomen = values[headerIndices['cognomen']]?.trim() || null;
@@ -685,10 +681,8 @@ app.post('/houses/:id/import-csv', async (req, res) => {
         const isBastard = parseInt(values[headerIndices['is_bastard']]) || 0;
         const birthYear = values[headerIndices['birth_year']]?.trim() ? parseInt(values[headerIndices['birth_year']]) : null;
         const deathYear = values[headerIndices['death_year']]?.trim() ? parseInt(values[headerIndices['death_year']]) : null;
-        const fatherPraenomen = values[headerIndices['father_praenomen']]?.trim() || null;
-        const fatherNomen = values[headerIndices['father_nomen']]?.trim() || null;
-        const motherPraenomen = values[headerIndices['mother_praenomen']]?.trim() || null;
-        const motherNomen = values[headerIndices['mother_nomen']]?.trim() || null;
+        const fatherTempId = values[headerIndices['father_temp_id']]?.trim() || null;
+        const motherTempId = values[headerIndices['mother_temp_id']]?.trim() || null;
 
         // Validate required fields
         if (!praenomen || !nomen) {
@@ -704,40 +698,55 @@ app.post('/houses/:id/import-csv', async (req, res) => {
         );
 
         const newPersonId = insertResult.insertId;
-        importedPeopleMap.set(`${praenomen}|${nomen}`, newPersonId);
-
-        // Handle parent relationships
-        if (fatherPraenomen && fatherNomen) {
-          // Find father by praenomen and nomen (search all houses)
-          const [fatherData] = await db.execute(
-            `SELECT id FROM person WHERE praenomen = ? AND nomen = ?`,
-            [fatherPraenomen, fatherNomen]
-          );
-          
-          if (fatherData.length > 0) {
-            await addParentChild(fatherData[0].id, newPersonId, 'biological', 'confirmed');
-          } else {
-            errors.push(`Row ${i + 1}: Father not found (${fatherPraenomen} ${fatherNomen})`);
-          }
-        }
-
-        if (motherPraenomen && motherNomen) {
-          // Find mother by praenomen and nomen (search all houses)
-          const [motherData] = await db.execute(
-            `SELECT id FROM person WHERE praenomen = ? AND nomen = ?`,
-            [motherPraenomen, motherNomen]
-          );
-          
-          if (motherData.length > 0) {
-            await addParentChild(motherData[0].id, newPersonId, 'biological', 'confirmed');
-          } else {
-            errors.push(`Row ${i + 1}: Mother not found (${motherPraenomen} ${motherNomen})`);
-          }
+        if (tempId) {
+          tempIdMap.set(tempId, newPersonId);
+          parentIdMap.set(newPersonId, { fatherTempId, motherTempId });
         }
 
         importedCount++;
       } catch (rowError) {
         errors.push(`Row ${i + 1}: ${rowError.message}`);
+      }
+    }
+
+    // Now process parent relationships using temp IDs
+    for (const [newPersonId, parentRefs] of parentIdMap.entries()) {
+      try {
+        // Handle father
+        if (parentRefs.fatherTempId) {
+          const fatherId = tempIdMap.get(parentRefs.fatherTempId);
+          if (fatherId) {
+            await addParentChild(fatherId, newPersonId, 'biological', 'confirmed');
+          } else {
+            // Try to find father by ID in database (in case it's referencing existing person)
+            const [fatherData] = await db.execute(
+              `SELECT id FROM person WHERE id = ?`,
+              [parentRefs.fatherTempId]
+            );
+            if (fatherData.length > 0) {
+              await addParentChild(fatherData[0].id, newPersonId, 'biological', 'confirmed');
+            }
+          }
+        }
+
+        // Handle mother
+        if (parentRefs.motherTempId) {
+          const motherId = tempIdMap.get(parentRefs.motherTempId);
+          if (motherId) {
+            await addParentChild(motherId, newPersonId, 'biological', 'confirmed');
+          } else {
+            // Try to find mother by ID in database
+            const [motherData] = await db.execute(
+              `SELECT id FROM person WHERE id = ?`,
+              [parentRefs.motherTempId]
+            );
+            if (motherData.length > 0) {
+              await addParentChild(motherData[0].id, newPersonId, 'biological', 'confirmed');
+            }
+          }
+        }
+      } catch (relError) {
+        // Silently skip relationship errors - person was still imported
       }
     }
 
@@ -767,6 +776,387 @@ app.post('/houses/:id/import-csv', async (req, res) => {
       people,
       message: { type: 'error', text: 'Import failed', details: error.message },
       genderifyNomen
+    });
+  }
+});
+
+// Export multiple houses to CSV
+app.post('/houses/multi-export', async (req, res) => {
+  try {
+    const houseIds = req.body.house_ids ? 
+      (Array.isArray(req.body.house_ids) ? req.body.house_ids : [req.body.house_ids]) 
+      : [];
+    
+    if (houseIds.length === 0) {
+      return res.status(400).send('No houses selected');
+    }
+
+    // Convert to integers and validate
+    const validHouseIds = houseIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+    
+    if (validHouseIds.length === 0) {
+      return res.status(400).send('Invalid house IDs');
+    }
+
+    // Get house names for the filename
+    const housePlaceholders = validHouseIds.map(() => '?').join(',');
+    const [selectedHouses] = await db.execute(
+      `SELECT id, gens_name FROM house WHERE id IN (${housePlaceholders})`,
+      validHouseIds
+    );
+
+    let csv = 'temp_id,house_name,praenomen,nomen,cognomen,sex,is_bastard,birth_year,death_year,father_temp_id,mother_temp_id\n';
+    
+    for (const houseId of validHouseIds) {
+      const house = selectedHouses.find(h => h.id === houseId);
+      const houseName = house ? house.gens_name : 'Unknown';
+
+      // Get all people in this house
+      const [people] = await db.execute(
+        `SELECT id, praenomen, nomen, cognomen, sex, is_bastard, birth_year, death_year FROM person WHERE house_id = ? ORDER BY praenomen`,
+        [houseId]
+      );
+
+      // Get parent-child relationships
+      const [relationships] = await db.execute(
+        `SELECT pc.parent_id, pc.child_id
+         FROM parent_child pc
+         JOIN person p1 ON pc.parent_id = p1.id
+         JOIN person p2 ON pc.child_id = p2.id
+         WHERE (p1.house_id = ? OR p2.house_id = ?)`,
+        [houseId, houseId]
+      );
+
+      for (const person of people) {
+        // Find parents for this person
+        const personRelationships = relationships.filter(r => r.child_id === person.id);
+        
+        let fatherId = '';
+        let motherId = '';
+        
+        for (const rel of personRelationships) {
+          const [parentData] = await db.execute(
+            `SELECT id, sex FROM person WHERE id = ?`,
+            [rel.parent_id]
+          );
+          
+          if (parentData.length > 0) {
+            if (parentData[0].sex === 1) {
+              fatherId = parentData[0].id;
+            } else {
+              motherId = parentData[0].id;
+            }
+          }
+        }
+        
+        const praenomen = escapeCSV(person.praenomen);
+        const nomen = escapeCSV(person.nomen);
+        const cognomen = escapeCSV(person.cognomen || '');
+        const sex = person.sex;
+        const isBastard = person.is_bastard;
+        const birthYear = person.birth_year || '';
+        const deathYear = person.death_year || '';
+        
+        csv += `${person.id},${houseName},${praenomen},${nomen},${cognomen},${sex},${isBastard},${birthYear},${deathYear},${fatherId},${motherId}\n`;
+      }
+    }
+
+    // Send as download
+    const filename = selectedHouses.length === 1 
+      ? `${selectedHouses[0].gens_name}_export.csv`
+      : `multi_house_export_${Date.now()}.csv`;
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Multi-house export error:', error);
+    res.status(500).send('Error exporting CSV');
+  }
+});
+
+// Delete house and all its members and relationships
+app.post('/houses/:id/delete', async (req, res) => {
+  try {
+    const houseId = parseInt(req.params.id);
+
+    // Get house info
+    const [house] = await db.execute(
+      `SELECT * FROM house WHERE id = ?`,
+      [houseId]
+    );
+
+    if (house.length === 0) {
+      return res.status(404).send('House not found');
+    }
+
+    // Get all people in this house
+    const [personIds] = await db.execute(
+      `SELECT id FROM person WHERE house_id = ?`,
+      [houseId]
+    );
+
+    // Delete all relationships for people in this house
+    for (const person of personIds) {
+      // Delete parent-child relationships
+      await db.execute(
+        `DELETE FROM parent_child WHERE parent_id = ? OR child_id = ?`,
+        [person.id, person.id]
+      );
+      // Delete partnerships
+      await db.execute(
+        `DELETE FROM partnership WHERE person_id = ?`,
+        [person.id]
+      );
+    }
+
+    // Delete all people in this house
+    await db.execute(
+      `DELETE FROM person WHERE house_id = ?`,
+      [houseId]
+    );
+
+    // Delete the house
+    await db.execute(
+      `DELETE FROM house WHERE id = ?`,
+      [houseId]
+    );
+
+    // Redirect back to houses list
+    res.redirect('/houses');
+  } catch (error) {
+    console.error('Delete house error:', error);
+    res.status(500).send('Error deleting house: ' + error.message);
+  }
+});
+
+// Import CSV with multiple houses
+app.post('/houses/multi-import', async (req, res) => {
+  try {
+    // Check if file was uploaded
+    if (!req.files || !req.files['csv-file']) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No file uploaded' 
+      });
+    }
+
+    const file = req.files['csv-file'];
+    const csvData = file.data.toString('utf-8');
+    const lines = csvData.split('\n').map(line => line.trim()).filter(line => line);
+
+    if (lines.length < 2) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'CSV file must have a header and at least one data row' 
+      });
+    }
+
+    // Parse header
+    const headers = lines[0].split(',').map(h => h.trim());
+    const requiredHeaders = ['praenomen', 'nomen', 'sex', 'house_name'];
+    
+    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+    if (missingHeaders.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Invalid CSV format. Missing columns: ${missingHeaders.join(', ')}`
+      });
+    }
+
+    // Create header index map
+    const headerIndices = {};
+    headers.forEach((header, i) => {
+      headerIndices[header] = i;
+    });
+
+    let importedCount = 0;
+    let errors = [];
+    const tempIdMap = new Map();
+    const parentIdMap = new Map();
+    const houseNameToHouseId = new Map();
+    const newlyCreatedHouses = new Set(); // Track newly created houses
+    const founderCandidates = new Map(); // Track best founder candidate per house
+
+    // First pass: collect all house names
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseCSVLine(lines[i]);
+      const houseName = values[headerIndices['house_name']]?.trim();
+      if (houseName && !houseNameToHouseId.has(houseName)) {
+        houseNameToHouseId.set(houseName, null); // Placeholder
+      }
+    }
+
+    // Get or create houses
+    for (const houseName of houseNameToHouseId.keys()) {
+      const [existingHouse] = await db.execute(
+        `SELECT id FROM house WHERE gens_name = ?`,
+        [houseName]
+      );
+      if (existingHouse.length > 0) {
+        houseNameToHouseId.set(houseName, existingHouse[0].id);
+      } else {
+        // Create new house
+        const [insertResult] = await db.execute(
+          `INSERT INTO house (gens_name) VALUES (?)`,
+          [houseName]
+        );
+        houseNameToHouseId.set(houseName, insertResult.insertId);
+        newlyCreatedHouses.add(houseName);
+        founderCandidates.set(houseName, null);
+      }
+    }
+
+    // Second pass: import people and check for duplicates in existing houses
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const line = lines[i];
+        if (!line.trim()) continue;
+
+        const values = parseCSVLine(line);
+
+        const houseName = values[headerIndices['house_name']]?.trim();
+        const houseId = houseNameToHouseId.get(houseName);
+        
+        if (!houseId) {
+          errors.push(`Row ${i + 1}: House "${houseName}" not found or could not be created`);
+          continue;
+        }
+
+        const tempId = values[headerIndices['temp_id']]?.trim() || null;
+        const praenomen = values[headerIndices['praenomen']]?.trim();
+        const nomen = values[headerIndices['nomen']]?.trim();
+        const cognomen = values[headerIndices['cognomen']]?.trim() || null;
+        const sex = parseInt(values[headerIndices['sex']]) || 0;
+        const isBastard = parseInt(values[headerIndices['is_bastard']]) || 0;
+        const birthYear = values[headerIndices['birth_year']]?.trim() ? parseInt(values[headerIndices['birth_year']]) : null;
+        const deathYear = values[headerIndices['death_year']]?.trim() ? parseInt(values[headerIndices['death_year']]) : null;
+        const fatherTempId = values[headerIndices['father_temp_id']]?.trim() || null;
+        const motherTempId = values[headerIndices['mother_temp_id']]?.trim() || null;
+
+        if (!praenomen || !nomen) {
+          errors.push(`Row ${i + 1}: Missing praenomen or nomen`);
+          continue;
+        }
+
+        // Check for duplicates if importing to existing house
+        if (!newlyCreatedHouses.has(houseName)) {
+          const [existingPeople] = await db.execute(
+            `SELECT id, praenomen, nomen, cognomen, birth_year, death_year FROM person WHERE house_id = ?`,
+            [houseId]
+          );
+
+          for (const existing of existingPeople) {
+            // Check for exact name match
+            if (existing.praenomen === praenomen && existing.nomen === nomen) {
+              const existingDisplay = `${existing.praenomen} ${existing.nomen}${existing.cognomen ? ' ' + existing.cognomen : ''}${existing.birth_year ? ' (' + existing.birth_year + ')' : ''}`;
+              const newDisplay = `${praenomen} ${nomen}${cognomen ? ' ' + cognomen : ''}${birthYear ? ' (' + birthYear + ')' : ''}`;
+              duplicateWarnings.push(`Possible duplicate in ${houseName}: existing "${existingDisplay}" vs importing "${newDisplay}"`);
+              break;
+            }
+          }
+        }
+
+        // Insert person
+        const [insertResult] = await db.execute(
+          `INSERT INTO person (praenomen, nomen, cognomen, house_id, sex, is_bastard, birth_year, death_year)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [praenomen, nomen, cognomen, houseId, sex, isBastard, birthYear, deathYear]
+        );
+
+        const newPersonId = insertResult.insertId;
+        if (tempId) {
+          tempIdMap.set(tempId, newPersonId);
+          parentIdMap.set(newPersonId, { fatherTempId, motherTempId });
+        }
+
+        // Track founder candidate for newly created houses
+        if (newlyCreatedHouses.has(houseName)) {
+          const currentCandidate = founderCandidates.get(houseName);
+          
+          // Best founder is: oldest person (earliest birth_year), 
+          // or if no birth year, someone with no parents, preferably male
+          if (currentCandidate === null) {
+            founderCandidates.set(houseName, { 
+              id: newPersonId, 
+              birthYear, 
+              hasParents: !!(fatherTempId || motherTempId),
+              sex 
+            });
+          } else {
+            // Compare with current candidate
+            const shouldReplace = 
+              // If new has birth year and current doesn't
+              (birthYear !== null && currentCandidate.birthYear === null) ||
+              // If both have birth year, use earlier one
+              (birthYear !== null && currentCandidate.birthYear !== null && birthYear < currentCandidate.birthYear) ||
+              // If new has no parents and current does, and both have same birth year situation
+              (!fatherTempId && !motherTempId && currentCandidate.hasParents && birthYear === currentCandidate.birthYear);
+            
+            if (shouldReplace) {
+              founderCandidates.set(houseName, { 
+                id: newPersonId, 
+                birthYear, 
+                hasParents: !!(fatherTempId || motherTempId),
+                sex 
+              });
+            }
+          }
+        }
+
+        importedCount++;
+      } catch (rowError) {
+        errors.push(`Row ${i + 1}: ${rowError.message}`);
+      }
+    }
+
+    // Third pass: create parent relationships
+    for (const [newPersonId, parentRefs] of parentIdMap.entries()) {
+      try {
+        if (parentRefs.fatherTempId) {
+          const fatherId = tempIdMap.get(parentRefs.fatherTempId);
+          if (fatherId) {
+            await addParentChild(fatherId, newPersonId, 'biological', 'confirmed');
+          }
+        }
+
+        if (parentRefs.motherTempId) {
+          const motherId = tempIdMap.get(parentRefs.motherTempId);
+          if (motherId) {
+            await addParentChild(motherId, newPersonId, 'biological', 'confirmed');
+          }
+        }
+      } catch (relError) {
+        // Silently skip relationship errors
+      }
+    }
+
+    // Fourth pass: set founders for newly created houses
+    for (const houseName of newlyCreatedHouses) {
+      const founderCandidate = founderCandidates.get(houseName);
+      if (founderCandidate && founderCandidate.id) {
+        const houseId = houseNameToHouseId.get(houseName);
+        await db.execute(
+          `UPDATE house SET founder_id = ? WHERE id = ?`,
+          [founderCandidate.id, houseId]
+        );
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Imported ${importedCount} members`,
+      details: errors.length > 0 ? `${errors.length} errors encountered` : 'No errors',
+      errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
+      duplicateWarnings: duplicateWarnings.length > 0 ? duplicateWarnings.slice(0, 5) : undefined,
+      duplicateCount: duplicateWarnings.length > 0 ? duplicateWarnings.length : undefined
+    });
+  } catch (error) {
+    console.error('Multi-house import error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Import failed',
+      details: error.message 
     });
   }
 });

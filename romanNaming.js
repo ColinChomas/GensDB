@@ -1,6 +1,18 @@
 function genderifyNomen(gensName, sex) {
   // sex: 1 = male, 0 = female
 
+  // Handle plural nominative masculine forms ending in -ii (Claudii, Cornelii, Valerii)
+  if (gensName.endsWith('ii')) {
+    const base = gensName.slice(0, -2); // Remove -ii
+    if (sex === 1) {
+      // Male: keep -us form (Claudii → Claudius)
+      return base + 'us';
+    } else {
+      // Female: convert to -a form (Claudii → Claudia)
+      return base + 'a';
+    }
+  }
+
   // If the gens ends in -a (Julia, Cornelia, Aemilia)
   if (gensName.endsWith('a')) {
     if (sex === 1) {

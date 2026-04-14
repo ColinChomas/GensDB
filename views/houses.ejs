@@ -3,6 +3,124 @@
 <head>
   <title>Houses (Gentes)</title>
   <link rel="stylesheet" href="/style.css">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <style>
+    .multi-export-section {
+      background: var(--bg-secondary);
+      padding: 20px;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+    
+    .select2-container--default .select2-selection--multiple {
+      border: 1px solid var(--border-color) !important;
+      background: var(--bg-primary) !important;
+    }
+    
+    .select2-container--default.select2-container--focus .select2-selection--multiple {
+      border: 1px solid var(--text-secondary) !important;
+    }
+    
+    .select2-container--default .select2-selection--multiple .select2-selection__choice {
+      background: var(--button-bg) !important;
+      border: none !important;
+      padding: 2px 8px !important;
+      margin-top: 4px !important;
+    }
+    
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+      color: white !important;
+      margin-right: 5px !important;
+    }
+    
+    .select2-dropdown {
+      background: var(--bg-primary) !important;
+      border: 1px solid var(--border-color) !important;
+    }
+    
+    .select2-results__option {
+      color: var(--text-primary) !important;
+    }
+    
+    .select2-results__option--highlighted {
+      background: var(--bg-secondary) !important;
+      color: var(--text-primary) !important;
+    }
+    
+    .selected-houses-display {
+      margin: 15px 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    
+    .selected-house-tag {
+      background: var(--button-bg);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .selected-house-tag .remove-btn {
+      cursor: pointer;
+      font-weight: bold;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    
+    .selected-house-tag .remove-btn:hover {
+      opacity: 1;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    
+    .button-group button, .button-group a {
+      padding: 10px 20px;
+      background: var(--button-bg);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    
+    .button-group button:hover, .button-group a:hover {
+      opacity: 0.9;
+    }
+    
+    .button-group button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    #importStatus {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+      line-height: 1.6;
+    }
+    
+    #importStatus.success {
+      background-color: #c8e6c9;
+      color: #2e7d32;
+      display: block;
+    }
+    
+    #importStatus.error {
+      background-color: #ffcdd2;
+      color: #c62828;
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <%- include('navbar') %>
@@ -26,6 +144,151 @@
           </li>
       <% }) %>
     </ul>
+
+    <hr>
+
+    <div class="multi-export-section">
+      <h2>📤 Multi-House Export</h2>
+      <p>Search and select multiple houses to export all their members as a single CSV file.</p>
+      
+      <label for="house-select"><strong>Select Houses:</strong></label><br>
+      <select id="house-select" multiple="multiple" style="width: 100%; margin: 10px 0;">
+        <% houses.forEach(h => { %>
+          <option value="<%= h.id %>"><%= h.gens_name %></option>
+        <% }) %>
+      </select>
+
+      <div id="selectedHousesDisplay" class="selected-houses-display"></div>
+
+      <div class="button-group">
+        <button type="button" id="exportBtn" onclick="exportSelectedHouses()" disabled>Export Selected Houses</button>
+      </div>
+    </div>
+
+    <div class="multi-export-section">
+      <h2>📥 Multi-House Import</h2>
+      <p>Upload a CSV file exported from another GensDB to import multiple houses and their family relationships.</p>
+      <p style="font-size: 13px; color: var(--text-primary);"><strong>Note:</strong> The CSV must include a <code>house_name</code> column. Houses will be created automatically if they don't exist.</p>
+
+      <form id="multiImportForm" enctype="multipart/form-data">
+        <label for="multi-csv-file"><strong>Select CSV file:</strong></label><br>
+        <input type="file" id="multi-csv-file" name="csv-file" accept=".csv" required style="padding: 8px; margin: 8px 0;"><br>
+        <button type="submit" style="padding: 10px 20px; background: var(--button-bg); color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Import From CSV
+        </button>
+      </form>
+
+      <div id="importStatus"></div>
+    </div>
+
   </main>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <script>
+    const housesData = [
+      <% houses.forEach((h, idx) => { %>
+        { id: <%= h.id %>, name: '<%= h.gens_name %>' }<%= idx < houses.length - 1 ? ',' : '' %>
+      <% }) %>
+    ];
+
+    let selectedHouseIds = [];
+
+    $(document).ready(function() {
+      $('#house-select').select2({
+        placeholder: 'Search and select houses...',
+        multiple: true
+      });
+
+      $('#house-select').on('change', function() {
+        selectedHouseIds = $(this).val() || [];
+        updateSelectedHousesDisplay();
+        document.getElementById('exportBtn').disabled = selectedHouseIds.length === 0;
+      });
+    });
+
+    function updateSelectedHousesDisplay() {
+      const display = document.getElementById('selectedHousesDisplay');
+      display.innerHTML = '';
+
+      selectedHouseIds.forEach(houseId => {
+        const house = housesData.find(h => h.id == houseId);
+        if (house) {
+          const tag = document.createElement('div');
+          tag.className = 'selected-house-tag';
+          tag.innerHTML = `
+            ${house.name}
+            <span class="remove-btn" onclick="removeHouseSelection('${houseId}')">✕</span>
+          `;
+          display.appendChild(tag);
+        }
+      });
+    }
+
+    function removeHouseSelection(houseId) {
+      selectedHouseIds = selectedHouseIds.filter(id => id != houseId);
+      $('#house-select').val(selectedHouseIds).trigger('change');
+    }
+
+    function exportSelectedHouses() {
+      if (selectedHouseIds.length === 0) {
+        alert('Please select at least one house to export');
+        return;
+      }
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/houses/multi-export';
+
+      selectedHouseIds.forEach(houseId => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'house_ids';
+        input.value = houseId;
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+    }
+
+    document.getElementById('multiImportForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(document.getElementById('multiImportForm'));
+      const statusDiv = document.getElementById('importStatus');
+
+      try {
+        const response = await fetch('/houses/multi-import', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+        statusDiv.className = data.success ? 'success' : 'error';
+        let message = data.message + (data.details ? ' - ' + data.details : '');
+        
+        if (data.duplicateWarnings && data.duplicateWarnings.length > 0) {
+          message += `<br><br><strong>⚠️ Possible Duplicates Detected (${data.duplicateCount}):</strong><br>`;
+          data.duplicateWarnings.forEach(warning => {
+            message += `• ${warning}<br>`;
+          });
+          message += `<small>Review these in the house to check for merges.</small>`;
+        }
+        
+        statusDiv.innerHTML = message;
+        statusDiv.style.display = 'block';
+
+        if (data.success) {
+          document.getElementById('multiImportForm').reset();
+          setTimeout(() => location.reload(), 2000);
+        }
+      } catch (error) {
+        statusDiv.className = 'error';
+        statusDiv.textContent = 'Import failed: ' + error.message;
+        statusDiv.style.display = 'block';
+      }
+    });
+  </script>
 </body>
 </html>
